@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/store/useGameStore';
+import { useGameStore, ProjectorMode } from '@/store/useGameStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -152,6 +152,9 @@ export function HostPanel() {
              <Button className="font-black" onClick={toggleTimer}>
                {timer.isActive ? 'STOP' : 'START'}
              </Button>
+             <Button variant="outline" className="font-black" onClick={useGameStore.getState().resetTimer}>
+               RESET
+             </Button>
           </div>
         </header>
 
@@ -169,7 +172,7 @@ export function HostPanel() {
               <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Projector Mode</span>
               <div className="flex gap-2 mt-1">
                 {['scoreboard', 'black', 'logo'].map(mode => (
-                  <Button key={mode} size="sm" variant={projectorMode === mode ? 'default' : 'outline'} onClick={() => setProjectorMode(mode as any)}>
+                  <Button key={mode} size="sm" variant={projectorMode === mode ? 'default' : 'outline'} onClick={() => setProjectorMode(mode as ProjectorMode)}>
                     {mode.toUpperCase()}
                   </Button>
                 ))}

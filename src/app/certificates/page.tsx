@@ -1,32 +1,43 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import { Button } from '@/components/ui/button';
-import { Award, Printer } from 'lucide-react';
+import { Printer } from 'lucide-react';
 
-export default function CertificatesPage() {
-  const teams = useGameStore(s => s.teams);
-  const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
-
-  const Certificate = ({ title, name, description, color }: { title: string, name: string, description: string, color: string }) => (
-    <div className="w-[800px] h-[600px] border-[20px] border-double bg-white p-12 flex flex-col items-center justify-between shadow-2xl mb-12 print:break-after-always" style={{ borderColor: color }}>
-      <div className="text-center w-full">
-        <h2 className="text-5xl font-black uppercase tracking-widest text-slate-900 mb-4">{title}</h2>
-        <div className="w-24 h-1 bg-slate-900 mx-auto" />
-      </div>
-      <div className="text-center">
-        <p className="text-xl font-bold text-slate-600 uppercase tracking-widest">This certificate is awarded to</p>
-        <h1 className="text-7xl font-black text-slate-950 mt-4">{name.toUpperCase()}</h1>
-      </div>
-      <div className="text-center">
-        <p className="text-2xl font-bold text-slate-700 italic">"{description}"</p>
-        <div className="mt-8 flex justify-center gap-12 text-slate-400 font-bold uppercase tracking-widest text-xs">
-          <span>BOARDING HOUSE 2026</span>
-          <span>TABLE WARS</span>
-        </div>
+export const Certificate = ({ title, name, description, color }: { title: string, name: string, description: string, color: string }) => (
+  <div className="w-[800px] h-[600px] border-[20px] border-double bg-white p-12 flex flex-col items-center justify-between shadow-2xl mb-12 print:break-after-always" style={{ borderColor: color }}>
+    <div className="text-center w-full">
+      <h2 className="text-5xl font-black uppercase tracking-widest text-slate-900 mb-4">{title}</h2>
+      <div className="w-24 h-1 bg-slate-900 mx-auto" />
+    </div>
+    <div className="text-center">
+      <p className="text-xl font-bold text-slate-600 uppercase tracking-widest">This certificate is awarded to</p>
+      <h1 className="text-7xl font-black text-slate-950 mt-4">{name.toUpperCase()}</h1>
+    </div>
+    <div className="text-center">
+      <p className="text-2xl font-bold text-slate-700 italic">&quot;{description}&quot;</p>
+      <div className="mt-8 flex justify-center gap-12 text-slate-400 font-bold uppercase tracking-widest text-xs">
+        <span>BOARDING HOUSE 2026</span>
+        <span>TABLE WARS</span>
       </div>
     </div>
-  );
+  </div>
+);
+
+export default function CertificatesPage() {
+  const { teams, initialize } = useGameStore();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      initialize().then(() => setIsInitialized(true));
+    }
+  }, [initialize, isInitialized]);
+
+  if (!isInitialized) return null;
+
+  const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
 
   return (
     <div className="min-h-screen bg-slate-100 p-8">

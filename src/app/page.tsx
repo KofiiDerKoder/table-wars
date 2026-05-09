@@ -10,15 +10,10 @@ import { LandingScreen } from '@/components/views/LandingScreen';
 import { useEffect, useState } from 'react';
 
 export default function GamePage() {
-  const { currentView, setView } = useGameStore();
-  const [mounted, setMounted] = useState(false);
+  const { currentView } = useGameStore();
   const [hasStarted, setHasStarted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+  if (typeof window === 'undefined') return null;
 
   if (!hasStarted) {
     return <LandingScreen onStart={() => setHasStarted(true)} />;

@@ -1,14 +1,8 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
 
 export type View = 'setup' | 'host' | 'scoreboard' | 'team' | 'results';
 export type ProjectorMode = 'scoreboard' | 'black' | 'logo' | 'announcement' | 'intro';
-
-export interface RoundScore {
-  round: number;
-  points: number;
-  details: string;
-}
 
 export type Team = {
   id: string;
@@ -16,53 +10,45 @@ export type Team = {
   color: string;
   score: number;
   roundScores: Record<number, number>;
-  memberCount: number;
   rank: number;
   rankTrend: 'up' | 'down' | 'stable';
   chant?: string;
-  // Specific tracking for Round 4 bug fix
-  tasteItemScores: Record<string, number>; 
+  memberCount: number;
+  tasteItemScores: Record<string, number>;
 };
 
-export type QuizQuestion = {
+export interface QuizQuestion {
   id: string;
   text: string;
   options: string[];
   correctAnswer: string;
   category: string;
-};
+}
 
-export type TasteItem = {
+export interface TasteItem {
   id: string;
   name: string;
-  hint: string;
-  category: string;
-};
+  description?: string;
+  category?: string;
+  hint?: string;
+}
 
 interface GameState {
-  // Navigation & UI
   currentView: View;
   projectorMode: ProjectorMode;
   announcementText: string;
-  showConfidenceMonitor: boolean;
-
-  // Competition State
-  teams: Team[];
-  currentRound: number;
-  gameStatus: 'idle' | 'running' | 'paused' | 'finished';
-  isSuddenDeath: boolean;
   introTeamId: string | null;
-  
-  // Timer
+  showConfidenceMonitor: boolean;
+  teams: Team[];
   timer: {
     duration: number;
     remaining: number;
     isActive: boolean;
   };
-
-  // Round Content
+  currentRound: number;
+  isSuddenDeath: boolean;
   quiz: {
-    banks: Record<number, QuizQuestion[]>;
+    questions: QuizQuestion[];
     currentIndex: number;
     isRevealed: boolean;
     buzzedTeamId: string | null;
@@ -79,233 +65,335 @@ interface GameState {
     winnerId: string | null;
     isActive: boolean;
   };
-
-  // Actions
-  setView: (view: View) => void;
-  setProjectorMode: (mode: ProjectorMode) => void;
-  setAnnouncement: (text: string) => void;
-  setTeams: (teams: Team[]) => void;
-  
-  // Refined Scoring Action (Fixes Bug 1 & 2 from Doc)
-  setTasteScore: (teamId: string, itemId: string, points: number) => void;
-  updateTeamScore: (teamId: string, points: number, round: number) => void;
-  
-  setCurrentRound: (round: number) => void;
-  setGameStatus: (status: 'idle' | 'running' | 'paused' | 'finished') => void;
-  setSuddenDeath: (active: boolean) => void;
-  setIntroTeam: (teamId: string | null) => void;
-  
-  // Timer Actions
-  startTimer: (seconds: number) => void;
-  stopTimer: () => void;
-  resetTimer: () => void;
-  tickTimer: () => void;
-
-  // Quiz Actions
-  setQuizQuestions: (questions: QuizQuestion[]) => void;
-  nextQuestion: () => void;
-  prevQuestion: () => void;
-  revealContent: () => void;
-  buzzIn: (teamId: string) => void;
-  clearBuzz: () => void;
-
-  // Taste Test Actions (CRUD - Phase 3 enhancement)
-  setTasteItems: (items: TasteItem[]) => void;
-  addTasteItem: (item: TasteItem) => void;
-  removeTasteItem: (id: string) => void;
-  updateTasteItem: (item: TasteItem) => void;
-  reorderTasteItems: (startIndex: number, endIndex: number) => void;
-  nextTasteItem: () => void;
-  prevTasteItem: () => void;
-
-  // Duel Actions
-  startDuel: (challengerId: string, challengedId: string) => void;
-  endDuel: (winnerId: string | null) => void;
-
-  resetAll: () => void;
+  setCurrentRound: (round: number) => Promise<void>;
+  setAnnouncement: (text: string) => Promise<void>;
+  setGameStatus: (status: 'idle' | 'running' | 'paused' | 'finished') => Promise<void>;
+  setIntroTeam: (teamId: string | null) => Promise<void>;
+  setTeams: (teams: Team[]) => Promise<void>;
+  setSuddenDeath: (active: boolean) => Promise<void>;
+  initialize: () => Promise<void>;
+  setView: (view: View) => Promise<void>;
+  updateTeamScore: (teamId: string, points: number, round: number) => Promise<void>;
+  startTimer: (seconds: number) => Promise<void>;
+  stopTimer: () => Promise<void>;
+  resetTimer: () => Promise<void>;
+  tickTimer: () => Promise<void>;
+  toggleTimer: () => void;
+  setTasteScore: (teamId: string, itemId: string, points: number) => Promise<void>;
+  setTasteItems: (items: TasteItem[]) => Promise<void>;
+  addTasteItem: (item: TasteItem) => Promise<void>;
+  updateTasteItem: (item: TasteItem) => Promise<void>;
+  removeTasteItem: (id: string) => Promise<void>;
+  revealContent: () => Promise<void>;
+  setQuizQuestions: (questions: QuizQuestion[]) => Promise<void>;
+  nextQuestion: () => Promise<void>;
+  prevQuestion: () => Promise<void>;
+  buzzIn: (teamId: string) => Promise<void>;
+  clearBuzz: () => Promise<void>;
+  setProjectorMode: (mode: ProjectorMode) => Promise<void>;
+  nextTasteItem: () => Promise<void>;
+  prevTasteItem: () => Promise<void>;
+  startDuel: (challengerId: string, challengedId: string) => Promise<void>;
+  endDuel: (winnerId: string | null) => Promise<void>;
+  resetAll: () => Promise<void>;
 }
 
-export const useGameStore = create<GameState>()(
-  persist(
-    (set, get) => {
-      // Cross-tab sync setup
-      if (typeof window !== 'undefined') {
-        const channel = new BroadcastChannel('table-wars-sync');
-        channel.onmessage = (event) => {
-          set(event.data);
-        };
-      }
+export const useGameStore = create<GameState>((set, get) => ({
+  currentView: 'setup',
+  projectorMode: 'logo',
+  announcementText: '',
+  introTeamId: null,
+  showConfidenceMonitor: true,
+  teams: [],
+  currentRound: 1,
+  isSuddenDeath: false,
+  timer: { duration: 0, remaining: 0, isActive: false },
+  quiz: { questions: [], currentIndex: 0, isRevealed: false, buzzedTeamId: null },
+  tasteTest: { items: [], currentIndex: 0, isRevealed: false, itemsCustomized: false },
+  duel: { challengerId: null, challengedId: null, winnerId: null, isActive: false },
 
-      return {
-        currentView: 'setup',
-        projectorMode: 'logo',
-        announcementText: '',
-        showConfidenceMonitor: true,
-        teams: [],
-        currentRound: 1,
-        gameStatus: 'idle',
-        isSuddenDeath: false,
-        introTeamId: null,
-        timer: {
-          duration: 0,
-          remaining: 0,
-          isActive: false,
-        },
-        quiz: {
-          questions: [],
-          currentIndex: 0,
-          isRevealed: false,
-          buzzedTeamId: null,
-        },
-        tasteTest: {
-          items: [],
-          currentIndex: 0,
-          isRevealed: false,
-          itemsCustomized: false,
-        },
-        duel: {
-          challengerId: null,
-          challengedId: null,
-          winnerId: null,
-          isActive: false,
-        },
+  initialize: async () => {
+    const { data: state } = await supabase.from('game_state').select('*').eq('id', 1).single();
+    const { data: teams } = await supabase.from('teams').select('*');
+    if (state) set({ 
+        currentView: state.current_view, 
+        projectorMode: state.projector_mode,
+        currentRound: state.current_round,
+        timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active }
+    });
+    if (teams) set({ teams: teams as Team[] });
+  },
 
-        setView: (currentView) => {
-           set({ currentView });
-           new BroadcastChannel('table-wars-sync').postMessage({ currentView });
-        },
-        setProjectorMode: (projectorMode) => {
-           set({ projectorMode });
-           new BroadcastChannel('table-wars-sync').postMessage({ projectorMode });
-        },
-        setAnnouncement: (announcementText) => {
-           set({ announcementText });
-           new BroadcastChannel('table-wars-sync').postMessage({ announcementText });
-        },
-        setTeams: (teams) => {
-           set({ teams });
-           new BroadcastChannel('table-wars-sync').postMessage({ teams });
-        },
-      
-      setTasteScore: (teamId, itemId, points) => set((state) => {
-        const teams = state.teams.map(t => {
-          if (t.id === teamId) {
-            const oldItemScore = t.tasteItemScores[itemId] || 0;
-            const currentRoundTotal = t.roundScores[4] || 0;
-            return {
-              ...t,
-              score: t.score - oldItemScore + points,
-              roundScores: { ...t.roundScores, [4]: currentRoundTotal - oldItemScore + points },
-              tasteItemScores: { ...t.tasteItemScores, [itemId]: points }
-            };
-          }
-          return t;
-        });
-        return { teams };
-      }),
-
-      updateTeamScore: (teamId, points, round) => set((state) => {
-        const updatedTeams = state.teams.map((t) => {
-          if (t.id === teamId) {
-            const currentRoundScore = t.roundScores[round] || 0;
-            return {
-              ...t,
-              score: t.score + points,
-              roundScores: { ...t.roundScores, [round]: currentRoundScore + points },
-            };
-          }
-          return t;
-        });
-
-        // Compute rankings
-        const sorted = [...updatedTeams].sort((a, b) => b.score - a.score);
-        return {
-          teams: updatedTeams.map(t => {
-            const newRank = sorted.findIndex(s => s.id === t.id) + 1;
-            const trend = newRank < t.rank ? 'up' : newRank > t.rank ? 'down' : 'stable';
-            return { ...t, rank: newRank, rankTrend: trend };
-          })
-        };
-      }),
-
-      setCurrentRound: (currentRound) => set({ currentRound }),
-      setGameStatus: (gameStatus) => set({ gameStatus }),
-      setSuddenDeath: (isSuddenDeath) => set({ isSuddenDeath }),
-      setIntroTeam: (introTeamId) => set({ introTeamId, projectorMode: introTeamId ? 'intro' : 'scoreboard' }),
-
-      startTimer: (seconds) => set({ timer: { duration: seconds, remaining: seconds, isActive: true } }),
-      stopTimer: () => set((state) => ({ timer: { ...state.timer, isActive: false } })),
-      resetTimer: () => set((state) => ({ timer: { ...state.timer, remaining: state.timer.duration, isActive: false } })),
-      tickTimer: () => set((state) => {
-        if (!state.timer.isActive || state.timer.remaining <= 0) return {};
-        return { timer: { ...state.timer, remaining: state.timer.remaining - 1 } };
-      }),
-
-      setQuizQuestions: (questions) => set((state) => ({ quiz: { ...state.quiz, questions } })),
-      nextQuestion: () => set((state) => ({ 
-        quiz: { ...state.quiz, currentIndex: Math.min(state.quiz.currentIndex + 1, state.quiz.questions.length - 1), isRevealed: false, buzzedTeamId: null } 
-      })),
-      prevQuestion: () => set((state) => ({ 
-        quiz: { ...state.quiz, currentIndex: Math.max(state.quiz.currentIndex - 1, 0), isRevealed: false, buzzedTeamId: null } 
-      })),
-      revealContent: () => set((state) => {
-        if (state.currentRound === 1 || state.currentRound === 5) {
-          return { quiz: { ...state.quiz, isRevealed: true } };
-        }
-        if (state.currentRound === 4) {
-          return { tasteTest: { ...state.tasteTest, isRevealed: true } };
-        }
-        return {};
-      }),
-      buzzIn: (teamId) => set((state) => {
-        if (state.quiz.buzzedTeamId) return {};
-        return { quiz: { ...state.quiz, buzzedTeamId: teamId } };
-      }),
-      clearBuzz: () => set((state) => ({ quiz: { ...state.quiz, buzzedTeamId: null } })),
-
-      setTasteItems: (items) => set((state) => ({ tasteTest: { ...state.tasteTest, items, itemsCustomized: true } })),
-      addTasteItem: (item) => set((state) => ({ tasteTest: { ...state.tasteTest, items: [...state.tasteTest.items, item], itemsCustomized: true } })),
-      removeTasteItem: (id) => set((state) => ({ tasteTest: { ...state.tasteTest, items: state.tasteTest.items.filter(i => i.id !== id), itemsCustomized: true } })),
-      updateTasteItem: (item) => set((state) => ({ tasteTest: { ...state.tasteTest, items: state.tasteTest.items.map(i => i.id === item.id ? item : i), itemsCustomized: true } })),
-      reorderTasteItems: (start, end) => set((state) => {
-        const items = [...state.tasteTest.items];
-        const [removed] = items.splice(start, 1);
-        items.splice(end, 0, removed);
-        return { tasteTest: { ...state.tasteTest, items, itemsCustomized: true } };
-      }),
-      nextTasteItem: () => set((state) => ({ 
-        tasteTest: { ...state.tasteTest, currentIndex: Math.min(state.tasteTest.currentIndex + 1, state.tasteTest.items.length - 1), isRevealed: false } 
-      })),
-      prevTasteItem: () => set((state) => ({ 
-        tasteTest: { ...state.tasteTest, currentIndex: Math.max(state.tasteTest.currentIndex - 1, 0), isRevealed: false } 
-      })),
-
-      startDuel: (challengerId, challengedId) => set({ 
-        duel: { challengerId, challengedId, winnerId: null, isActive: true } 
-      }),
-      endDuel: (winnerId) => set((state) => ({ 
-        duel: { ...state.duel, winnerId, isActive: false } 
-      })),
-
-        resetAll: () => set({
-          currentView: 'setup',
-          projectorMode: 'scoreboard',
-          announcementText: '',
-          teams: [],
-          currentRound: 1,
-          gameStatus: 'idle',
-          isSuddenDeath: false,
-          introTeamId: null,
-          timer: { duration: 0, remaining: 0, isActive: false },
-          quiz: { banks: {}, currentIndex: 0, isRevealed: false, buzzedTeamId: null },
-          tasteTest: { items: [], currentIndex: 0, isRevealed: false, itemsCustomized: false },
-          duel: { challengerId: null, challengedId: null, winnerId: null, isActive: false },
-        }),
-      };
-    },
-    {
-      name: 'table-wars-storage',
-      storage: createJSONStorage(() => localStorage),
+  setView: async (view: View) => {
+    set({ currentView: view });
+    try {
+      await supabase.from('game_state').update({ current_view: view }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist view:', error);
     }
-  )
-);
+  },
+
+  updateTeamScore: async (teamId, points, round) => {
+    const team = get().teams.find(t => t.id === teamId);
+    if (!team) return;
+    const newScore = team.score + points;
+    const newRoundScores = { ...team.roundScores, [round]: (team.roundScores[round] || 0) + points };
+    set((state) => ({
+      teams: state.teams.map(t => t.id === teamId ? { ...t, score: newScore, roundScores: newRoundScores } : t)
+    }));
+    try {
+      await supabase.from('teams').update({ score: newScore, round_scores: newRoundScores }).eq('id', teamId);
+      const { data: updatedTeam } = await supabase.from('teams').select('*').eq('id', teamId).single();
+      if (updatedTeam) {
+        set((state) => ({
+          teams: state.teams.map(t => t.id === teamId ? { ...t, score: updatedTeam.score, roundScores: updatedTeam.round_scores } : t)
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to persist team score:', error);
+    }
+  },
+  
+  setCurrentRound: async (round) => {
+    set({ currentRound: round });
+    try {
+      await supabase.from('game_state').update({ current_round: round }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist current round:', error);
+    }
+  },
+  setAnnouncement: async (text) => {
+    set({ announcementText: text });
+    try {
+      await supabase.from('game_state').update({ announcement_text: text }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist announcement:', error);
+    }
+  },
+  setGameStatus: async (status) => {
+    try {
+      await supabase.from('game_state').update({ game_status: status }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist game status:', error);
+    }
+  },
+  setIntroTeam: async (id) => {
+    set({ introTeamId: id });
+    try {
+      await supabase.from('game_state').update({ intro_team_id: id }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist intro team:', error);
+    }
+  },
+  setTeams: async (teams) => {
+    set({ teams });
+    try {
+      await supabase.from('teams').upsert(teams);
+    } catch (error) {
+      console.warn('Failed to persist teams:', error);
+    }
+  },
+  setSuddenDeath: async (active) => {
+    set({ isSuddenDeath: active });
+    try {
+      await supabase.from('game_state').update({ is_suddenDeath: active }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist sudden death:', error);
+    }
+  },
+  
+  startTimer: async (seconds: number) => {
+    await supabase.from('game_state').update({ timer_remaining: seconds, timer_is_active: true }).eq('id', 1);
+    set((state) => ({ timer: { duration: seconds, remaining: seconds, isActive: true } }));
+  },
+  stopTimer: async () => {
+    await supabase.from('game_state').update({ timer_is_active: false }).eq('id', 1);
+    set((state) => ({ timer: { ...state.timer, isActive: false } }));
+  },
+  resetTimer: async () => {
+    await supabase.from('game_state').update({ timer_remaining: 0, timer_is_active: false }).eq('id', 1);
+    set({ timer: { duration: 0, remaining: 0, isActive: false } });
+  },
+  tickTimer: async () => {
+    const { timer } = get();
+    if (timer.remaining > 0) {
+      const newRemaining = timer.remaining - 1;
+      await supabase.from('game_state').update({ timer_remaining: newRemaining }).eq('id', 1);
+      set({ timer: { ...timer, remaining: newRemaining } });
+    }
+  },
+  revealContent: async () => {
+    const { quiz } = get();
+    set({ quiz: { ...quiz, isRevealed: true } });
+    try {
+      await supabase.from('game_state').update({ quiz_revealed: true }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist reveal state:', error);
+    }
+  },
+  nextQuestion: async () => {
+    const { quiz } = get();
+    const newIdx = quiz.currentIndex + 1;
+    set({ quiz: { ...quiz, currentIndex: newIdx, isRevealed: false } });
+    try {
+      await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist next question:', error);
+    }
+  },
+  prevQuestion: async () => {
+    const { quiz } = get();
+    const newIdx = Math.max(0, quiz.currentIndex - 1);
+    set({ quiz: { ...quiz, currentIndex: newIdx, isRevealed: false } });
+    try {
+      await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist previous question:', error);
+    }
+  },
+  setProjectorMode: async (projectorMode: ProjectorMode) => {
+    set({ projectorMode });
+    try {
+      await supabase.from('game_state').update({ projector_mode: projectorMode }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist projector mode:', error);
+    }
+  },
+  nextTasteItem: async () => {
+    const { tasteTest } = get();
+    const newIdx = tasteTest.currentIndex + 1;
+    set({ tasteTest: { ...tasteTest, currentIndex: newIdx } });
+    try {
+      await supabase.from('game_state').update({ taste_index: newIdx }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist taste item index:', error);
+    }
+  },
+  prevTasteItem: async () => {
+    const { tasteTest } = get();
+    const newIdx = Math.max(0, tasteTest.currentIndex - 1);
+    set({ tasteTest: { ...tasteTest, currentIndex: newIdx } });
+    try {
+      await supabase.from('game_state').update({ taste_index: newIdx }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist taste item index:', error);
+    }
+  },
+  startDuel: async (challengerId: string, challengedId: string) => {
+    set((state) => ({ duel: { ...state.duel, challengerId, challengedId, isActive: true } }));
+    try {
+      await supabase.from('game_state').update({ duel_challenger: challengerId, duel_challenged: challengedId, duel_active: true }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist duel start:', error);
+    }
+  },
+  endDuel: async (winnerId: string | null) => {
+    set((state) => ({ duel: { ...state.duel, winnerId, isActive: false } }));
+    try {
+      await supabase.from('game_state').update({ duel_winner: winnerId, duel_active: false }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist duel end:', error);
+    }
+  },
+  setTasteScore: async (teamId, itemId, points) => {
+    const team = get().teams.find(t => t.id === teamId);
+    if (!team) return;
+    
+    // Calculate new score and round score
+    const oldScoreForThisItem = team.tasteItemScores[itemId] || 0;
+    const newScore = team.score - oldScoreForThisItem + points;
+    const newRoundScores = { ...team.roundScores, 4: (team.roundScores[4] || 0) - oldScoreForThisItem + points };
+    const newTasteItemScores = { ...team.tasteItemScores, [itemId]: points };
+
+    await supabase.from('teams').update({ 
+      score: newScore, 
+      round_scores: newRoundScores,
+      taste_item_scores: newTasteItemScores
+    }).eq('id', teamId);
+    
+    // Optimistic local update
+    set((state) => ({
+      teams: state.teams.map(t => t.id === teamId ? { ...t, score: newScore, roundScores: newRoundScores, tasteItemScores: newTasteItemScores } : t)
+    }));
+  },
+  setTasteItems: async (items) => {
+    await supabase.from('game_state').update({ taste_items: items }).eq('id', 1);
+    set((state) => ({ tasteTest: { ...state.tasteTest, items } }));
+  },
+  addTasteItem: async (item) => {
+    const newItems = [...get().tasteTest.items, item];
+    await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
+    set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
+  },
+  updateTasteItem: async (item) => {
+    const newItems = get().tasteTest.items.map(i => i.id === item.id ? item : i);
+    await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
+    set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
+  },
+  removeTasteItem: async (id) => {
+    const newItems = get().tasteTest.items.filter(i => i.id !== id);
+    await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
+    set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
+  },
+  toggleTimer: () => set((state) => ({ timer: { ...state.timer, isActive: !state.timer.isActive } })),
+  setQuizQuestions: async (questions) => {
+    await supabase.from('game_state').update({ quiz_questions: questions }).eq('id', 1);
+    set((state) => ({ quiz: { ...state.quiz, questions } }));
+  },
+  buzzIn: async (teamId: string) => {
+    const { quiz } = get();
+    set({ quiz: { ...quiz, buzzedTeamId: teamId } });
+    try {
+      await supabase.from('game_state').update({ buzzed_team_id: teamId }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist buzz:', error);
+    }
+  },
+  clearBuzz: async () => {
+    const { quiz } = get();
+    set({ quiz: { ...quiz, buzzedTeamId: null } });
+    try {
+      await supabase.from('game_state').update({ buzzed_team_id: null }).eq('id', 1);
+    } catch (error) {
+      console.warn('Failed to persist buzz clear:', error);
+    }
+  },
+  resetAll: async () => {
+    await supabase.from('teams').update({ score: 0, round_scores: {} }).neq('id', 'non-existent');
+    await supabase.from('game_state').update({ 
+      current_view: 'setup',
+      current_round: 1,
+      buzzed_team_id: null
+    }).eq('id', 1);
+    set({
+      currentView: 'setup',
+      currentRound: 1,
+      teams: get().teams.map(t => ({ ...t, score: 0, roundScores: {} }))
+    });
+  },
+}));
+
+// Initialize Supabase Subscriptions
+const channel = supabase.channel('game_updates');
+
+channel
+  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state' }, (payload: { new: Record<string, unknown> }) => {
+    const newState = payload.new as {
+      current_view: View;
+      projector_mode: ProjectorMode;
+      current_round: number;
+      announcement_text: string;
+    };
+    useGameStore.setState({ 
+      currentView: newState.current_view,
+      projectorMode: newState.projector_mode,
+      currentRound: newState.current_round,
+      announcementText: newState.announcement_text
+    });
+  })
+  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams' }, (payload: { new: Team }) => {
+    useGameStore.setState((state) => ({
+      teams: state.teams.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t)
+    }));
+  })
+  .subscribe();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/store/useGameStore';
+import { useGameStore, QuizQuestion } from '@/store/useGameStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -30,7 +30,7 @@ export function QuizControls() {
   const buzzedTeam = teams.find(t => t.id === quiz.buzzedTeamId);
   const isFinale = currentRound === 5;
 
-  const handleUpdateQuestion = (index: number, updated: any) => {
+  const handleUpdateQuestion = (index: number, updated: QuizQuestion) => {
     const newQs = [...quiz.questions];
     newQs[index] = updated;
     setQuizQuestions(newQs);
@@ -132,7 +132,7 @@ export function QuizControls() {
         <h2 className="text-3xl font-black mb-8 leading-tight text-foreground">{q.text}</h2>
         
         <div className="grid grid-cols-2 gap-4">
-          {q.options.map((opt, i) => (
+          {q.options.map((opt: string, i: number) => (
             <div key={i} className={clsx(
               "p-4 rounded-xl border-2 font-black text-sm",
               opt === q.correctAnswer ? "border-primary/50 bg-primary/5 text-primary" : "border-slate-100 bg-slate-50 text-slate-400"
@@ -320,11 +320,11 @@ export function TasteTestControls() {
          <div className="flex justify-between items-end">
             <div>
                <h2 className="text-5xl font-black text-white mb-2">{item.name.toUpperCase()}</h2>
-               <p className="text-xl text-slate-400 italic">Hint: "{item.hint}"</p>
+               <p className="text-xl text-slate-400 italic">Hint: &quot;{item.hint}&quot;</p>
             </div>
             <Button 
               onClick={revealContent} 
-              className="bg-blue-600 hover:bg-blue-700 font-black h-12 px-8"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-black h-12 px-8"
               disabled={tasteTest.isRevealed}
             >
                REVEAL HINT [SPACE]

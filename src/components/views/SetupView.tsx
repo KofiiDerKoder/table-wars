@@ -20,6 +20,7 @@ const COLORS = [
 
 export function SetupView() {
   const { teams, setTeams, setView, setQuizQuestions, setTasteItems } = useGameStore();
+  console.log('SetupView rendered, teams length:', teams.length);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamChant, setNewTeamChant] = useState('');
 
@@ -47,7 +48,12 @@ export function SetupView() {
   };
 
   const handleStart = () => {
-    if (teams.length < 3) return;
+    console.log('Start Competition button clicked!');
+    console.log('Current teams length:', teams.length);
+    if (teams.length < 3) {
+      console.warn('Need at least 3 teams to start. Current:', teams.length);
+      return;
+    }
     setQuizQuestions(DEFAULT_QUIZ_QUESTIONS);
     setTasteItems(DEFAULT_TASTE_ITEMS);
     setView('host');
@@ -129,7 +135,7 @@ export function SetupView() {
                   <span className="font-black text-foreground text-lg">{info.value}</span>
                 </div>
               ))}
-              <Button onClick={handleStart} disabled={teams.length < 3} className="w-full h-16 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20">
+              <Button onClick={handleStart} className="w-full h-16 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20">
                 <Play className="mr-2" /> Start Competition
               </Button>
             </CardContent>

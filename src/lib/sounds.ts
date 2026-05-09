@@ -3,7 +3,8 @@ export class SoundEngine {
 
   private static getCtx() {
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.ctx = new AudioContextClass();
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();

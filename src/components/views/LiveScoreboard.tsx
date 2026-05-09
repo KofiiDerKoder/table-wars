@@ -2,37 +2,17 @@
 
 import { useGameStore } from '@/store/useGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Crown, MessageSquare } from 'lucide-react';
+import { Crown, MessageSquare } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { clsx } from 'clsx';
-import { useEffect, useState } from 'react';
 
 export function LiveScoreboard() {
   const teams = useGameStore(s => s.teams);
-  useEffect(() => {
-    console.log('Scoreboard teams updated:', teams);
-  }, [teams]);
   const currentRound = useGameStore(s => s.currentRound);
   const projectorMode = useGameStore(s => s.projectorMode);
-  useEffect(() => {
-    console.log('Scoreboard mode changed to:', projectorMode);
-  }, [projectorMode]);
   const announcementText = useGameStore(s => s.announcementText);
   const timer = useGameStore(s => s.timer);
-  const quiz = useGameStore(s => s.quiz);
-  const tasteTest = useGameStore(s => s.tasteTest);
   const introTeamId = useGameStore(s => s.introTeamId);
-
-  const [showSplash, setShowSplash] = useState(false);
-  const [splashText, setSplashText] = useState('');
-
-  // Round Splash Logic
-  useEffect(() => {
-    setSplashText(`ROUND ${currentRound}`);
-    setShowSplash(true);
-    const splashTimer = setTimeout(() => setShowSplash(false), 3000);
-    return () => clearTimeout(splashTimer);
-  }, [currentRound]);
 
   const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
   const maxScore = Math.max(...teams.map(t => t.score), 10);
@@ -68,7 +48,7 @@ export function LiveScoreboard() {
           {introTeam?.chant && (
              <div className="max-w-4xl mx-auto py-6 md:py-12 px-6 md:px-20 bg-muted rounded-[30px] md:rounded-[60px]">
                 <p className="text-lg md:text-2xl font-black text-primary uppercase tracking-widest mb-2 md:mb-4">Team Chant</p>
-                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">"{introTeam.chant}"</p>
+                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">&quot;{introTeam.chant}&quot;</p>
              </div>
           )}
         </motion.div>

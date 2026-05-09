@@ -42,12 +42,17 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply min-h-screen bg-background text-foreground font-sans antialiased;
   }
+
+  input,
+  textarea,
+  button,
+  select {
+    @apply border border-border bg-input text-foreground outline-none;
+  }
+
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
