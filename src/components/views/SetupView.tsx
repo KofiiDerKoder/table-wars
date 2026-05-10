@@ -13,16 +13,39 @@ import { useState } from 'react';
 import { DEFAULT_QUIZ_QUESTIONS, DEFAULT_TASTE_ITEMS } from '@/lib/constants';
 import { clsx } from 'clsx';
 
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter
+} from "@/components/ui/dialog";
+
 const COLORS = [
   '#ef4444', '#3b82f6', '#22c55e', '#eab308', 
   '#a855f7', '#f97316', '#ec4899', '#06b6d4'
 ];
 
 export function SetupView() {
-  const { teams, setTeams, setView, setQuizQuestions, setTasteItems } = useGameStore();
-  console.log('SetupView rendered, teams length:', teams.length);
+  const { teams, setTeams, setView, setQuizQuestions, setTasteItems, session, joinSession } = useGameStore();
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamChant, setNewTeamChant] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+
+  const handleJoinSession = async () => {
+    if (!joinCode.trim()) return;
+    setIsJoining(true);
+    const result = await joinSession(joinCode);
+    setIsJoining(false);
+    if (result) {
+      setView('team');
+    } else {
+      alert('Invalid session code');
+    }
+  };
 
   const addTeam = () => {
     if (teams.length >= 8 || !newTeamName.trim()) return;
@@ -48,12 +71,7 @@ export function SetupView() {
   };
 
   const handleStart = () => {
-    console.log('Start Competition button clicked!');
-    console.log('Current teams length:', teams.length);
-    if (teams.length < 3) {
-      console.warn('Need at least 3 teams to start. Current:', teams.length);
-      return;
-    }
+    if (teams.length < 3) return;
     setQuizQuestions(DEFAULT_QUIZ_QUESTIONS);
     setTasteItems(DEFAULT_TASTE_ITEMS);
     setView('host');
@@ -138,6 +156,44 @@ export function SetupView() {
               <Button onClick={handleStart} className="w-full h-16 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20">
                 <Play className="mr-2" /> Start Competition
               </Button>
+
+              <Separator />
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full h-12 font-black uppercase tracking-widest border-dashed">
+                    Join Existing Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Join Competition Session</DialogTitle>
+                    <DialogDescription>
+                      Enter the 6-character session code provided by the host to join as a team device.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <Label htmlFor="joinCode" className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2 block">Session Code</Label>
+                    <Input 
+                      id="joinCode" 
+                      placeholder="e.g. AB3X9K" 
+                      className="h-12 text-center text-2xl font-black uppercase tracking-widest"
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                      maxLength={6}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      className="w-full h-12 font-black uppercase tracking-widest"
+                      onClick={handleJoinSession}
+                      disabled={joinCode.length < 6 || isJoining}
+                    >
+                      {isJoining ? 'Joining...' : 'Join Session'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </div>

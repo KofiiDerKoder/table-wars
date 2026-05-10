@@ -15,34 +15,59 @@ export function TeamView() {
   const quiz = useGameStore(s => s.quiz);
   const currentRound = useGameStore(s => s.currentRound);
   const buzzIn = useGameStore(s => s.buzzIn);
+  const session = useGameStore(s => s.session);
+  const setView = useGameStore(s => s.setView);
   
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [localSelectedTeamId, setLocalSelectedTeamId] = useState<string | null>(null);
 
-  const team = teams.find(t => t.id === selectedTeamId);
+  const effectiveTeamId = session?.joinedTeamId || localSelectedTeamId;
+  const team = teams.find(t => t.id === effectiveTeamId);
+
+  const handleSelectTeam = (id: string) => {
+    if (session) {
+      // In a session, we might want to update the session info locally
+      useGameStore.setState({ session: { ...session, joinedTeamId: id } });
+    }
+    setLocalSelectedTeamId(id);
+  };
 
   const handleBuzz = () => {
-    if (!selectedTeamId || quiz.buzzedTeamId) return;
-    buzzIn(selectedTeamId);
+    if (!effectiveTeamId || quiz.buzzedTeamId) return;
+    buzzIn(effectiveTeamId);
     SoundEngine.playBuzzer();
     if (navigator.vibrate) navigator.vibrate(200);
   };
 
-  if (!selectedTeamId) {
+  if (!effectiveTeamId) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center justify-center">
-        <h1 className="text-4xl font-black mb-8 tracking-tighter text-center">SELECT YOUR <span className="text-blue-600">TEAM</span></h1>
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-black tracking-tighter">SELECT YOUR <span className="text-blue-600">TEAM</span></h1>
+          {session && (
+            <Badge variant="outline" className="mt-2 font-mono border-blue-500/30 text-blue-400">
+              SESSION: {session.code}
+            </Badge>
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-4 w-full max-w-sm">
           {teams.map(t => (
             <Button
               key={t.id}
-              onClick={() => setSelectedTeamId(t.id)}
+              onClick={() => handleSelectTeam(t.id)}
               className="h-16 text-xl font-black border-2 bg-slate-900 hover:bg-slate-800 transition-all"
               style={{ borderColor: t.color + '44', borderLeftWidth: '8px', borderLeftColor: t.color }}
             >
               {t.name.toUpperCase()}
             </Button>
           ))}
-          {teams.length === 0 && <p className="text-slate-500 text-center italic">Waiting for host to add teams...</p>}
+          {teams.length === 0 && (
+            <div className="space-y-4 text-center">
+              <p className="text-slate-500 italic">Waiting for host to add teams...</p>
+              <Button variant="ghost" size="sm" onClick={() => setView('setup')} className="text-slate-600">
+                Back to Setup
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -53,6 +78,13 @@ export function TeamView() {
   const isBuzzed = quiz.buzzedTeamId === team.id;
   const someoneElseBuzzed = quiz.buzzedTeamId && quiz.buzzedTeamId !== team.id;
 
+  const handleSwitchTeam = () => {
+    if (session) {
+      useGameStore.setState({ session: { ...session, joinedTeamId: undefined } });
+    }
+    setLocalSelectedTeamId(null);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
       <header className="p-6 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
@@ -60,7 +92,7 @@ export function TeamView() {
           <div className="w-4 h-4 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.2)]" style={{ backgroundColor: team.color }} />
           <h2 className="text-xl font-black tracking-tight">{team.name.toUpperCase()}</h2>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setSelectedTeamId(null)} className="text-slate-500 text-xs">SWITCH</Button>
+        <Button variant="ghost" size="sm" onClick={handleSwitchTeam} className="text-slate-500 text-xs">SWITCH</Button>
       </header>
 
       <main className="flex-1 p-6 space-y-6">

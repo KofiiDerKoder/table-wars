@@ -2,7 +2,7 @@
 
 import { useGameStore } from '@/store/useGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, MessageSquare } from 'lucide-react';
+import { Crown, MessageSquare, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { clsx } from 'clsx';
 
@@ -13,9 +13,14 @@ export function LiveScoreboard() {
   const announcementText = useGameStore(s => s.announcementText);
   const timer = useGameStore(s => s.timer);
   const introTeamId = useGameStore(s => s.introTeamId);
+  const quiz = useGameStore(s => s.quiz);
+  const tasteTest = useGameStore(s => s.tasteTest);
 
   const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
   const maxScore = Math.max(...teams.map(t => t.score), 10);
+
+  const currentQuestion = quiz.questions[quiz.currentIndex];
+  const currentTasteItem = tasteTest.items[tasteTest.currentIndex];
 
   if (projectorMode === 'black') {
     return <div className="fixed inset-0 bg-background z-[100]" />;
@@ -48,13 +53,17 @@ export function LiveScoreboard() {
           {introTeam?.chant && (
              <div className="max-w-4xl mx-auto py-6 md:py-12 px-6 md:px-20 bg-muted rounded-[30px] md:rounded-[60px]">
                 <p className="text-lg md:text-2xl font-black text-primary uppercase tracking-widest mb-2 md:mb-4">Team Chant</p>
-                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">&quot;{introTeam.chant}&quot;</p>
+                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">"{introTeam.chant}"</p>
              </div>
           )}
         </motion.div>
       </div>
     );
   }
+
+  // Question/Taste Item Display (shown when revealed via Space key)
+  const showQuestionOverlay = quiz.isRevealed && currentQuestion && (currentRound === 1 || currentRound === 5);
+  const showTasteOverlay = tasteTest.isRevealed && currentTasteItem && currentRound === 4;
 
   return (
     <div className="min-h-screen bg-muted/50 p-4 md:p-12 text-foreground font-sans selection:bg-primary/20">
@@ -88,6 +97,52 @@ export function LiveScoreboard() {
         </div>
 
         <div className="flex-1 flex flex-col gap-4 md:gap-6 max-w-7xl mx-auto w-full relative">
+          {/* Question/Taste Overlay — replaces leaderboard when revealed */}
+          {(showQuestionOverlay || showTasteOverlay) ? (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={showQuestionOverlay ? 'question' : 'taste'}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex-1 flex items-center justify-center"
+              >
+                {showQuestionOverlay && currentQuestion && (
+                  <div className="max-w-4xl w-full text-center space-y-8">
+                    <Badge variant="outline" className="text-lg font-black px-6 py-2">
+                      {currentQuestion.category}
+                    </Badge>
+                    <h2 className="text-4xl md:text-6xl font-black leading-tight text-foreground">
+                      {currentQuestion.text}
+                    </h2>
+                    <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                      {currentQuestion.options.map((opt, i) => (
+                        <div key={i} className="p-5 rounded-xl border-2 border-border bg-white font-bold text-xl">
+                          {String.fromCharCode(65 + i)}) {opt}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showTasteOverlay && currentTasteItem && (
+                  <div className="max-w-4xl w-full text-center space-y-8">
+                    <Badge variant="outline" className="text-lg font-black px-6 py-2">
+                      {currentTasteItem.category}
+                    </Badge>
+                    <h2 className="text-4xl md:text-6xl font-black leading-tight text-foreground">
+                      {currentTasteItem.name}
+                    </h2>
+                    {currentTasteItem.hint && (
+                      <p className="text-2xl md:text-3xl text-muted-foreground italic mt-4">
+                        Hint: "{currentTasteItem.hint}"
+                      </p>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          ) : (
+            <>
           <div className="flex items-center justify-between">
              <h2 className="text-2xl md:text-4xl font-black uppercase tracking-widest text-foreground">Current Standings</h2>
              <Badge variant="outline" className="text-sm md:text-base font-black px-4 py-1">
@@ -147,6 +202,8 @@ export function LiveScoreboard() {
               ))}
             </AnimatePresence>
           </motion.div>
+            </>
+          )}
         </div>
       </div>
     </div>

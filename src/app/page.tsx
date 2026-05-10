@@ -7,13 +7,18 @@ import { LiveScoreboard } from '@/components/views/LiveScoreboard';
 import { TeamView } from '@/components/views/TeamView';
 import { ResultsView } from '@/components/views/ResultsView';
 import { LandingScreen } from '@/components/views/LandingScreen';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function GamePage() {
   const { currentView } = useGameStore();
   const [hasStarted, setHasStarted] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  if (typeof window === 'undefined') return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   if (!hasStarted) {
     return <LandingScreen onStart={() => setHasStarted(true)} />;

@@ -1,9 +1,9 @@
 'use client';
 
-import { TeamView } from '@/components/views/TeamView';
-import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+
+const TeamView = dynamic(() => import('@/components/views/TeamView').then(mod => ({ default: mod.TeamView })), { ssr: false });
 
 export default function ForcedTeamPage() {
-  if (typeof window === 'undefined') return null;
   return <TeamView />;
 }

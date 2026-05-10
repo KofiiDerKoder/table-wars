@@ -25,6 +25,8 @@ export function QuizControls() {
   const revealContent = useGameStore(s => s.revealContent);
   const clearBuzz = useGameStore(s => s.clearBuzz);
   const setQuizQuestions = useGameStore(s => s.setQuizQuestions);
+  const undoLastScore = useGameStore(s => s.undoLastScore);
+  const lastScoreChange = useGameStore(s => s.lastScoreChange);
 
   const q = quiz.questions[quiz.currentIndex];
   const buzzedTeam = teams.find(t => t.id === quiz.buzzedTeamId);
@@ -42,15 +44,17 @@ export function QuizControls() {
   };
 
   const addQuestion = () => {
-    const newQ = { id: Math.random().toString(), text: 'New Question', options: ['A', 'B', 'C', 'D'], correctAnswer: 'A', category: 'General' };
+    const newQ = { id: crypto.randomUUID(), text: 'New Question', options: ['A', 'B', 'C', 'D'], correctAnswer: 'A', category: 'General' };
     setQuizQuestions([...quiz.questions, newQ]);
   };
 
-  const handleCorrect = () => {
+  const handleCorrect = async () => {
     if (!buzzedTeam) return;
     updateTeamScore(buzzedTeam.id, isSuddenDeath ? 1 : (isFinale ? 10 : 5), currentRound);
     SoundEngine.playCorrect();
     clearBuzz();
+    // Auto-advance after correct answer
+    setTimeout(() => nextQuestion(), 1500);
   };
 
   const handleWrong = () => {
@@ -134,10 +138,17 @@ export function QuizControls() {
         <div className="grid grid-cols-2 gap-4">
           {q.options.map((opt: string, i: number) => (
             <div key={i} className={clsx(
-              "p-4 rounded-xl border-2 font-black text-sm",
-              opt === q.correctAnswer ? "border-primary/50 bg-primary/5 text-primary" : "border-slate-100 bg-slate-50 text-slate-400"
+              "p-4 rounded-xl border-2 font-black text-sm transition-all",
+              opt === q.correctAnswer 
+                ? quiz.isRevealed 
+                  ? "border-green-500 bg-green-50 text-green-700 ring-2 ring-green-300" 
+                  : "border-primary/50 bg-primary/5 text-primary"
+                : "border-slate-100 bg-slate-50 text-slate-400"
             )}>
               {String.fromCharCode(65 + i)}) {opt}
+              {opt === q.correctAnswer && quiz.isRevealed && (
+                <span className="ml-2 text-green-600 font-black">✓ CORRECT</span>
+              )}
             </div>
           ))}
         </div>
@@ -149,13 +160,23 @@ export function QuizControls() {
            </div>
            <Button 
             onClick={revealContent} 
-            className="bg-primary hover:bg-primary/90 text-white font-black px-8 h-12 shadow-lg"
-            disabled={quiz.isRevealed}
+            className={clsx("font-black px-8 h-12 shadow-lg", quiz.isRevealed ? "bg-slate-200 text-slate-600 hover:bg-slate-300" : "bg-primary hover:bg-primary/90 text-primary-foreground")}
            >
-             <Eye className="mr-2" size={18} /> Reveal to Audience [SPACE]
+             <Eye className="mr-2" size={18} /> {quiz.isRevealed ? 'HIDE [SPACE]' : 'REVEAL [SPACE]'}
            </Button>
         </div>
       </div>
+
+      {/* Undo Button */}
+      {lastScoreChange && (
+        <Button 
+          variant="outline" 
+          className="w-full border-orange-300 text-orange-700 hover:bg-orange-50 font-black"
+          onClick={() => undoLastScore()}
+        >
+          <ChevronLeft className="mr-2" size={16} /> UNDO LAST SCORE ({lastScoreChange.points > 0 ? '-' : '+'}{Math.abs(lastScoreChange.points)} from {teams.find(t => t.id === lastScoreChange.teamId)?.name})
+        </Button>
+      )}
 
       {/* Control Panels */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -171,10 +192,10 @@ export function QuizControls() {
                    </div>
                 </div>
                 <div className="flex gap-2">
-                   <Button onClick={handleCorrect} className="flex-1 h-14 bg-green-600 hover:bg-green-700 font-black">
+                   <Button onClick={handleCorrect} className="flex-1 h-14 bg-green-600 hover:bg-green-700 font-black text-white">
                      <CheckCircle className="mr-2" /> Correct (+{isSuddenDeath ? 1 : (isFinale ? 10 : 5)})
                    </Button>
-                   <Button onClick={handleWrong} className="flex-1 h-14 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black">
+                   <Button onClick={handleWrong} className="flex-1 h-14 bg-red-100 hover:bg-red-200 text-red-700 font-black">
                      <XCircle className="mr-2" /> Wrong
                    </Button>
                 </div>
@@ -216,11 +237,11 @@ export function PlacementControls({ round }: { round: number }) {
   return (
     <div className="space-y-4">
       {teams.map(team => (
-        <Card key={team.id} className="bg-slate-900 border-slate-800">
+        <Card key={team.id} className="bg-white border border-slate-200 shadow-sm">
            <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-4 h-4 rounded-full" style={{ backgroundColor: team.color }} />
-                <span className="text-xl font-black text-white">{team.name.toUpperCase()}</span>
+                <span className="text-xl font-black text-foreground">{team.name.toUpperCase()}</span>
               </div>
               
               <div className="flex items-center gap-4">
@@ -229,10 +250,10 @@ export function PlacementControls({ round }: { round: number }) {
                     <Button
                       key={i}
                       size="sm"
-                      variant="outline"
+                      variant={team.roundScores[round] === pts ? "default" : "outline"}
                       className={clsx(
-                        "w-12 h-12 font-black border-slate-800 transition-all",
-                        team.roundScores[round] === pts ? "bg-blue-600 text-white border-blue-400" : "hover:bg-slate-800"
+                        "w-12 h-12 font-black transition-all",
+                        team.roundScores[round] === pts && "bg-primary text-primary-foreground"
                       )}
                       onClick={() => updateTeamScore(team.id, pts - (team.roundScores[round] || 0), round)}
                     >
@@ -241,12 +262,12 @@ export function PlacementControls({ round }: { round: number }) {
                   ))}
                 </div>
                 
-                <Separator orientation="vertical" className="h-8 bg-slate-800" />
+                <Separator orientation="vertical" className="h-8 bg-slate-200" />
                 
                 {round === 2 && (
                   <Button 
                     variant="outline" 
-                    className="bg-red-900/20 border-red-900 text-red-500 font-black"
+                    className="bg-red-50 border-red-200 text-red-600 font-black hover:bg-red-100"
                     onClick={() => updateTeamScore(team.id, -3, round)}
                   >
                     DROP (-3)
@@ -256,7 +277,7 @@ export function PlacementControls({ round }: { round: number }) {
                 {round === 3 && (
                   <Button 
                     variant="outline" 
-                    className="bg-pink-900/20 border-pink-900 text-pink-500 font-black"
+                    className="bg-pink-50 border-pink-200 text-pink-600 font-black hover:bg-pink-100"
                     onClick={() => updateTeamScore(team.id, 5, round)}
                   >
                     CREATIVE (+5)
@@ -264,8 +285,8 @@ export function PlacementControls({ round }: { round: number }) {
                 )}
 
                 <div className="min-w-[80px] text-right">
-                   <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none mb-1">R{round} Pts</p>
-                   <p className="text-2xl font-black text-white">{team.roundScores[round] || 0}</p>
+                   <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest leading-none mb-1">R{round} Pts</p>
+                   <p className="text-2xl font-black text-foreground">{team.roundScores[round] || 0}</p>
                 </div>
               </div>
            </CardContent>
@@ -278,6 +299,7 @@ export function PlacementControls({ round }: { round: number }) {
 export function TasteTestControls() {
   const teams = useGameStore(s => s.teams);
   const tasteTest = useGameStore(s => s.tasteTest);
+  const currentRound = useGameStore(s => s.currentRound);
   const updateTeamScore = useGameStore(s => s.updateTeamScore);
   const setTasteScore = useGameStore(s => s.setTasteScore);
   const nextTasteItem = useGameStore(s => s.nextTasteItem);
@@ -293,38 +315,38 @@ export function TasteTestControls() {
 
   return (
     <div className="space-y-8">
-      <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+      <div className="bg-white border border-slate-100 shadow-sm p-8 rounded-3xl">
          <div className="flex justify-between items-start mb-6">
-            <span className="bg-purple-600/20 text-purple-400 px-3 py-1 rounded text-xs font-black uppercase tracking-widest">
+            <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded text-xs font-black uppercase tracking-widest">
               {item.category}
             </span>
             <div className="flex gap-2">
               <Dialog>
-                <DialogTrigger className="border border-slate-700 bg-slate-800 rounded-lg px-4 py-2 hover:bg-slate-700">
+                <DialogTrigger className="border border-slate-200 bg-white rounded-lg px-4 py-2 hover:bg-slate-50 text-[10px] font-black uppercase tracking-widest transition-colors">
                   <Edit2 size={16} className="mr-2 inline"/> EDIT ITEMS
                 </DialogTrigger>
-                <DialogContent className="bg-slate-900 text-white max-h-[80vh] overflow-y-auto">
+                <DialogContent className="bg-white text-foreground max-h-[80vh] overflow-y-auto">
                    <DialogHeader><DialogTitle>Edit Taste Test Items</DialogTitle></DialogHeader>
                    {tasteTest.items.map(it => (
-                     <div key={it.id} className="flex gap-2 items-center p-2 bg-slate-950 rounded">
-                        <Input value={it.name} onChange={(e) => updateTasteItem({...it, name: e.target.value})} className="bg-slate-900 border-none" />
+                     <div key={it.id} className="flex gap-2 items-center p-2 bg-slate-50 rounded">
+                        <Input value={it.name} onChange={(e) => updateTasteItem({...it, name: e.target.value})} className="border-slate-200" />
                         <Button variant="ghost" size="icon" onClick={() => removeTasteItem(it.id)}><Trash2 size={16} className="text-red-500" /></Button>
                      </div>
                    ))}
-                   <Button onClick={() => addTasteItem({id: Math.random().toString(), name: 'New Item', hint: 'Add hint', category: 'General'})}><Plus size={16} /></Button>
+                   <Button onClick={() => addTasteItem({id: crypto.randomUUID(), name: 'New Item', hint: 'Add hint', category: 'General'})}><Plus size={16} /></Button>
                 </DialogContent>
               </Dialog>
-              <span className="text-slate-500 font-mono text-xs pt-2">ITEM {tasteTest.currentIndex + 1} / {tasteTest.items.length}</span>
+              <span className="text-slate-400 font-mono text-xs pt-2">ITEM {tasteTest.currentIndex + 1} / {tasteTest.items.length}</span>
             </div>
          </div>
          <div className="flex justify-between items-end">
             <div>
-               <h2 className="text-5xl font-black text-white mb-2">{item.name.toUpperCase()}</h2>
-               <p className="text-xl text-slate-400 italic">Hint: &quot;{item.hint}&quot;</p>
+               <h2 className="text-5xl font-black text-foreground mb-2">{item.name.toUpperCase()}</h2>
+               <p className="text-xl text-muted-foreground italic">Hint: "{item.hint}"</p>
             </div>
             <Button 
               onClick={revealContent} 
-              className="bg-blue-600 hover:bg-blue-700 text-white font-black h-12 px-8"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-12 px-8"
               disabled={tasteTest.isRevealed}
             >
                REVEAL HINT [SPACE]
@@ -338,18 +360,18 @@ export function TasteTestControls() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
          {teams.map(team => (
-           <Card key={team.id} className="bg-slate-900 border-slate-800">
+           <Card key={team.id} className="bg-white border border-slate-200 shadow-sm">
               <CardContent className="p-4 space-y-4">
                  <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: team.color }} />
-                       <span className="font-black text-white">{team.name}</span>
+                       <span className="font-black text-foreground">{team.name}</span>
                     </div>
-                    <span className="text-blue-500 font-black">{team.roundScores[4] || 0}</span>
+                    <span className="text-blue-600 font-black">{team.roundScores[currentRound] || 0}</span>
                  </div>
                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1 bg-green-600 text-xs font-black" onClick={() => setTasteScore(team.id, item.id, 4)}>CORRECT (+4)</Button>
-                    <Button size="sm" className="flex-1 bg-yellow-600 text-xs font-black" onClick={() => setTasteScore(team.id, item.id, 2)}>PARTIAL (+2)</Button>
+                    <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-black" onClick={() => setTasteScore(team.id, item.id, 4)}>CORRECT (+4)</Button>
+                    <Button size="sm" className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-black" onClick={() => setTasteScore(team.id, item.id, 2)}>PARTIAL (+2)</Button>
                  </div>
               </CardContent>
            </Card>
@@ -373,19 +395,19 @@ export function FinaleControls() {
     <div className="space-y-8">
        <QuizControls />
        
-       <Separator className="bg-slate-800" />
+       <Separator className="bg-slate-200" />
        
-       <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+       <div className="bg-white border border-slate-100 shadow-sm p-8 rounded-3xl">
           <div className="flex items-center gap-4 mb-8">
              <Swords className="text-red-500" size={32} />
-             <h2 className="text-3xl font-black uppercase tracking-tighter">Duel Mechanic</h2>
+             <h2 className="text-3xl font-black uppercase tracking-tighter text-foreground">Duel Mechanic</h2>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
              <div className="space-y-2">
-                <Label className="text-slate-500 font-black uppercase tracking-widest text-[10px]">Challenger</Label>
+                <Label className="text-muted-foreground font-black uppercase tracking-widest text-[10px]">Challenger</Label>
                 <select 
-                  className="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg text-white font-bold"
+                  className="w-full bg-white border border-slate-200 p-3 rounded-lg text-foreground font-bold"
                   value={challenger}
                   onChange={(e) => setChallenger(e.target.value)}
                 >
@@ -394,9 +416,9 @@ export function FinaleControls() {
                 </select>
              </div>
              <div className="space-y-2">
-                <Label className="text-slate-500 font-black uppercase tracking-widest text-[10px]">Opponent</Label>
+                <Label className="text-muted-foreground font-black uppercase tracking-widest text-[10px]">Opponent</Label>
                 <select 
-                  className="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg text-white font-bold"
+                  className="w-full bg-white border border-slate-200 p-3 rounded-lg text-foreground font-bold"
                   value={challenged}
                   onChange={(e) => setChallenged(e.target.value)}
                 >
@@ -405,7 +427,7 @@ export function FinaleControls() {
                 </select>
              </div>
              <Button 
-               className="h-14 bg-red-600 hover:bg-red-700 text-lg font-black"
+               className="h-14 bg-red-600 hover:bg-red-700 text-white text-lg font-black"
                disabled={!challenger || !challenged || challenger === challenged}
                onClick={() => startDuel(challenger, challenged)}
              >
@@ -417,21 +439,21 @@ export function FinaleControls() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mt-8 p-6 bg-red-900/10 border-2 border-red-600/50 rounded-2xl flex flex-col items-center gap-6"
+              className="mt-8 p-6 bg-red-50 border-2 border-red-200 rounded-2xl flex flex-col items-center gap-6"
             >
-               <p className="text-2xl font-black text-red-500 tracking-widest uppercase">HEAD-TO-HEAD SHOWDOWN</p>
+               <p className="text-2xl font-black text-red-600 tracking-widest uppercase">HEAD-TO-HEAD SHOWDOWN</p>
                <div className="flex items-center gap-12">
                   <div className="text-center">
-                     <p className="text-3xl font-black text-white mb-2">{teams.find(t => t.id === duel.challengerId)?.name}</p>
-                     <Button className="bg-green-600" onClick={() => {
+                     <p className="text-3xl font-black text-foreground mb-2">{teams.find(t => t.id === duel.challengerId)?.name}</p>
+                     <Button className="bg-green-600 text-white" onClick={() => {
                         updateTeamScore(duel.challengerId!, 10, 5);
                         endDuel(duel.challengerId!);
                      }}>WINNER</Button>
                   </div>
-                  <Swords size={48} className="text-slate-700" />
+                  <Swords size={48} className="text-slate-300" />
                   <div className="text-center">
-                     <p className="text-3xl font-black text-white mb-2">{teams.find(t => t.id === duel.challengedId)?.name}</p>
-                     <Button className="bg-green-600" onClick={() => {
+                     <p className="text-3xl font-black text-foreground mb-2">{teams.find(t => t.id === duel.challengedId)?.name}</p>
+                     <Button className="bg-green-600 text-white" onClick={() => {
                         updateTeamScore(duel.challengedId!, 10, 5);
                         endDuel(duel.challengedId!);
                      }}>WINNER</Button>

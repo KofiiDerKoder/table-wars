@@ -12,7 +12,7 @@ export function GlobalListeners() {
   const timer = useGameStore(s => s.timer);
   const currentRound = useGameStore(s => s.currentRound);
   
-  // Actions (stable)
+  // Actions (stable hooks)
   const revealContent = useGameStore(s => s.revealContent);
   const nextQuestion = useGameStore(s => s.nextQuestion);
   const nextTasteItem = useGameStore(s => s.nextTasteItem);
@@ -20,8 +20,9 @@ export function GlobalListeners() {
   const buzzIn = useGameStore(s => s.buzzIn);
   const clearBuzz = useGameStore(s => s.clearBuzz);
   const setView = useGameStore(s => s.setView);
-  const toggleTimer = useGameStore.getState().toggleTimer;
-  const startTimer = useGameStore.getState().startTimer;
+  const toggleTimer = useGameStore(s => s.toggleTimer);
+  const startTimer = useGameStore(s => s.startTimer);
+  const stopTimer = useGameStore(s => s.stopTimer);
 
   // Timer Tick
   useEffect(() => {
@@ -47,7 +48,7 @@ export function GlobalListeners() {
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
       const s = useGameStore.getState();
 
@@ -58,7 +59,6 @@ export function GlobalListeners() {
           break;
         case 'ArrowRight':
           if (s.currentRound === 1 || s.currentRound === 5) {
-            const stopTimer = useGameStore.getState().stopTimer;
             stopTimer();
             nextQuestion();
           }
@@ -103,7 +103,7 @@ export function GlobalListeners() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [revealContent, nextQuestion, nextTasteItem, setProjectorMode, setView, router, clearBuzz, buzzIn]);
+  }, [revealContent, nextQuestion, nextTasteItem, setProjectorMode, setView, router, clearBuzz, buzzIn, toggleTimer, stopTimer]);
 
   return null;
 }
