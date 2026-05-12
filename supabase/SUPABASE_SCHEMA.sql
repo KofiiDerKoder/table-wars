@@ -1,7 +1,15 @@
 -- Table Wars! Supabase Schema (Full Multi-Device + Session Management)
 
+-- Drop existing tables if they exist (to avoid type conflicts)
+DROP TABLE IF EXISTS buzz_events CASCADE;
+DROP TABLE IF EXISTS teams CASCADE;
+DROP TABLE IF EXISTS game_state CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS quiz_questions CASCADE;
+DROP TABLE IF EXISTS taste_items CASCADE;
+
 -- 1. Sessions (New - Multi-Device Sync)
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code TEXT UNIQUE NOT NULL,  -- 6-char alphanumeric code (e.g., "AB3X9K")
     host_password TEXT,          -- Optional password for host access
@@ -14,7 +22,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 -- 2. Game State (Per-Session)
-CREATE TABLE IF NOT EXISTS game_state (
+CREATE TABLE game_state (
     id SERIAL PRIMARY KEY,
     session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
     current_view TEXT DEFAULT 'setup',
@@ -41,7 +49,7 @@ CREATE TABLE IF NOT EXISTS game_state (
 );
 
 -- 3. Teams (Per-Session)
-CREATE TABLE IF NOT EXISTS teams (
+CREATE TABLE teams (
     id TEXT PRIMARY KEY,
     session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -57,7 +65,7 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 
 -- 4. Buzz Events (New - Real-time Buzz Tracking)
-CREATE TABLE IF NOT EXISTS buzz_events (
+CREATE TABLE buzz_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
     team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
@@ -69,7 +77,7 @@ CREATE TABLE IF NOT EXISTS buzz_events (
 );
 
 -- 5. Quiz Questions (Legacy — questions stored in game_state.quiz_questions)
-CREATE TABLE IF NOT EXISTS quiz_questions (
+CREATE TABLE quiz_questions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     round_id INTEGER NOT NULL,
     question_text TEXT NOT NULL,
@@ -79,7 +87,7 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
 );
 
 -- 6. Taste Test Items (Legacy — items stored in game_state.taste_items)
-CREATE TABLE IF NOT EXISTS taste_items (
+CREATE TABLE taste_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     hint TEXT,
@@ -87,12 +95,12 @@ CREATE TABLE IF NOT EXISTS taste_items (
 );
 
 -- ─── Indexes for Performance ──────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_sessions_code ON sessions(code);
-CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active) WHERE is_active = TRUE;
-CREATE INDEX IF NOT EXISTS idx_game_state_session ON game_state(session_id);
-CREATE INDEX IF NOT EXISTS idx_teams_session ON teams(session_id);
-CREATE INDEX IF NOT EXISTS idx_buzz_events_session ON buzz_events(session_id);
-CREATE INDEX IF NOT EXISTS idx_buzz_events_question ON buzz_events(session_id, question_index);
+CREATE INDEX idx_sessions_code ON sessions(code);
+CREATE INDEX idx_sessions_active ON sessions(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_game_state_session ON game_state(session_id);
+CREATE INDEX idx_teams_session ON teams(session_id);
+CREATE INDEX idx_buzz_events_session ON buzz_events(session_id);
+CREATE INDEX idx_buzz_events_question ON buzz_events(session_id, question_index);
 
 -- ─── Enable Realtime ──────────────────────────────────────────────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE sessions;
