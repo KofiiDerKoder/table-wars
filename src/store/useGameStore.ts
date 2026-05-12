@@ -74,6 +74,7 @@ interface GameState {
     winnerId: string | null;
     isActive: boolean;
   };
+  tiebreakerTeams: string[];
   session: SessionInfo | null;
   setCurrentRound: (round: number) => Promise<void>;
   setAnnouncement: (text: string) => Promise<void>;
@@ -81,6 +82,7 @@ interface GameState {
   setIntroTeam: (teamId: string | null) => Promise<void>;
   setTeams: (teams: Team[]) => Promise<void>;
   setSuddenDeath: (active: boolean) => Promise<void>;
+  setTiebreakerTeams: (teamIds: string[]) => void;
   initialize: () => Promise<void>;
   setView: (view: View) => Promise<void>;
   updateTeamScore: (teamId: string, points: number, round: number) => Promise<void>;

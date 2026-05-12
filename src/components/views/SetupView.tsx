@@ -160,11 +160,13 @@ export function SetupView() {
               <Separator />
               
               <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full h-12 font-black uppercase tracking-widest border-dashed">
-                    Join Existing Session
-                  </Button>
-                </DialogTrigger>
+                <DialogTrigger 
+                  render={
+                    <Button variant="outline" className="w-full h-12 font-black uppercase tracking-widest border-dashed">
+                      Join Existing Session
+                    </Button>
+                  }
+                />
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Join Competition Session</DialogTitle>

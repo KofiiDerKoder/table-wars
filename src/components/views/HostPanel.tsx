@@ -85,6 +85,14 @@ export function HostPanel() {
   const [editingColor, setEditingColor] = useState('');
   const [editingChant, setEditingChant] = useState('');
 
+  const handleCustomTimer = () => {
+    const sec = parseInt(customTimer);
+    if (!isNaN(sec) && sec > 0) {
+      startTimer(sec);
+      setCustomTimer('');
+    }
+  };
+
   const handleEditClick = (team: any) => {
     setEditTeamId(team.id);
     setEditingName(team.name);
