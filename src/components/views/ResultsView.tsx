@@ -15,6 +15,7 @@ import html2canvas from 'html2canvas';
 export function ResultsView() {
   const teams = useGameStore(s => s.teams);
   const resetAll = useGameStore(s => s.resetAll);
+  const competitionName = useGameStore(s => s.competitionName);
   const router = useRouter();
   
   const [revealIndex, setRevealIndex] = useState(-1);
@@ -26,13 +27,15 @@ export function ResultsView() {
 
   const exportResultsPDF = async () => {
     setIsExporting(true);
-    const element = document.getElementById('results-content');
+    const element = document.getElementById('pdf-report-layout');
     if (element) {
+      element.style.display = 'block';
       const canvas = await html2canvas(element, { scale: 2 });
+      element.style.display = 'none';
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('portrait', 'px', [canvas.width / 2, canvas.height / 2]);
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
-      pdf.save('table-wars-results.pdf');
+      pdf.save(`${competitionName.toLowerCase().replace(/\s+/g, '-')}-results.pdf`);
     }
     setIsExporting(false);
   };
@@ -46,6 +49,55 @@ export function ResultsView() {
   };
 
   const ties = detectTies();
+
+  if (tiebreakerActive && ties.length > 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white p-12 flex flex-col items-center justify-center font-sans">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-4xl w-full bg-slate-900 border border-slate-800 rounded-[40px] p-12 text-center shadow-2xl">
+          <Badge className="bg-amber-500 text-black font-black mb-6 px-4 py-1 text-lg">SUDDEN DEATH TIEBREAKER</Badge>
+          <h2 className="text-6xl font-black tracking-tighter mb-12 uppercase">Final Showdown</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+            {ties.map(team => (
+              <div key={team.id} className={clsx(
+                "p-8 rounded-3xl border-4 transition-all flex flex-col items-center gap-6",
+                useGameStore.getState().quiz.buzzedTeamId === team.id ? "border-primary bg-primary/10 animate-pulse" : "border-slate-800 bg-slate-950/50"
+              )}>
+                <div className="w-20 h-20 rounded-full border-4 border-white shadow-lg" style={{ backgroundColor: team.color }} />
+                <h3 className="text-3xl font-black uppercase">{team.name}</h3>
+                <div className="flex gap-2 w-full">
+                  <Button 
+                    className="flex-1 bg-green-600 hover:bg-green-700 font-black h-12"
+                    onClick={() => {
+                      useGameStore.getState().updateTeamScore(team.id, 1, 5);
+                      setTiebreakerActive(false);
+                      setRevealIndex(teams.length); // Stay on results
+                    }}
+                  >
+                    WINNER (+1)
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-8 border-t border-slate-800">
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-sm mb-6">
+              Host: Ask a sudden death question. First team to buzz wins.
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button variant="outline" className="border-slate-700 text-slate-400 font-black uppercase" onClick={() => useGameStore.getState().clearBuzz()}>
+                CLEAR BUZZ
+              </Button>
+              <Button variant="ghost" className="text-slate-600 font-black uppercase" onClick={() => setTiebreakerActive(false)}>
+                CANCEL
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   const startReveal = () => {
     setRevealIndex(0);
@@ -65,6 +117,50 @@ export function ResultsView() {
 
   return (
     <div className="min-h-screen bg-muted/30 p-12 flex flex-col items-center font-sans">
+      <div id="pdf-report-layout" className="hidden w-[800px] bg-white text-slate-900 p-16 font-sans">
+        <div className="text-center mb-12 border-b-4 border-slate-900 pb-8">
+          <h1 className="text-5xl font-black uppercase tracking-tighter mb-2">{competitionName}</h1>
+          <p className="text-xl font-bold text-slate-500 uppercase tracking-widest">Official Competition Results</p>
+        </div>
+
+        <table className="w-full mb-16">
+          <thead>
+            <tr className="border-b-2 border-slate-200">
+              <th className="py-4 text-left font-black uppercase tracking-widest text-sm text-slate-400">Rank</th>
+              <th className="py-4 text-left font-black uppercase tracking-widest text-sm text-slate-400">Team</th>
+              <th className="py-4 text-right font-black uppercase tracking-widest text-sm text-slate-400">Total Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...sortedTeams].reverse().map((team, idx) => (
+              <tr key={team.id} className="border-b border-slate-100">
+                <td className="py-6 text-3xl font-black">{idx + 1}</td>
+                <td className="py-6 flex items-center gap-4">
+                  <div className="w-6 h-6 rounded-full" style={{ backgroundColor: team.color }} />
+                  <span className="text-2xl font-black uppercase">{team.name}</span>
+                </td>
+                <td className="py-6 text-right text-3xl font-black tabular-nums">{team.score}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="grid grid-cols-2 gap-8 mb-16">
+          <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Champion</p>
+            <p className="text-2xl font-black uppercase">{[...sortedTeams].reverse()[0]?.name}</p>
+          </div>
+          <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Participants</p>
+            <p className="text-2xl font-black uppercase">{teams.length} Teams</p>
+          </div>
+        </div>
+
+        <div className="text-center pt-8 border-t border-slate-100">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Generated on {new Date().toLocaleDateString()} • Boarding House Table Wars System</p>
+        </div>
+      </div>
+
       <div id="results-content" className="w-full flex flex-col items-center">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-16">
           <h1 className="text-7xl font-black tracking-tighter mb-4 uppercase text-foreground">

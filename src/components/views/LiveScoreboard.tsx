@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 
 export function LiveScoreboard() {
   const teams = useGameStore(s => s.teams);
+  const competitionName = useGameStore(s => s.competitionName);
   const currentRound = useGameStore(s => s.currentRound);
   const projectorMode = useGameStore(s => s.projectorMode);
   const announcementText = useGameStore(s => s.announcementText);
@@ -32,9 +33,11 @@ export function LiveScoreboard() {
         <motion.h1
           animate={{ scale: [1, 1.05, 1] }}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="text-5xl md:text-7xl lg:text-9xl font-black tracking-tighter text-foreground"
+          className="text-5xl md:text-7xl lg:text-9xl font-black tracking-tighter text-foreground text-center uppercase"
         >
-          TABLE <span className="text-primary">WARS</span>
+          {competitionName.split(' ').map((word, i) => (
+            <span key={i} className={i === competitionName.split(' ').length - 1 ? "text-primary ml-4" : ""}>{word} </span>
+          ))}
         </motion.h1>
       </div>
     );

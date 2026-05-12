@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Trophy, Users, ChefHat, Play } from 'lucide-react';
+import { Plus, Trash2, Trophy, Users, ChefHat, Play, Edit2, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_QUIZ_QUESTIONS, DEFAULT_TASTE_ITEMS } from '@/lib/constants';
 import { clsx } from 'clsx';
@@ -29,11 +29,13 @@ const COLORS = [
 ];
 
 export function SetupView() {
-  const { teams, setTeams, setView, setQuizQuestions, setTasteItems, session, joinSession } = useGameStore();
+  const { teams, setTeams, setView, setQuizQuestions, setTasteItems, session, joinSession, competitionName, setCompetitionName } = useGameStore();
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamChant, setNewTeamChant] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempCompName, setTempCompName] = useState(competitionName);
 
   const handleJoinSession = async () => {
     if (!joinCode.trim()) return;
@@ -45,6 +47,11 @@ export function SetupView() {
     } else {
       alert('Invalid session code');
     }
+  };
+
+  const handleUpdateCompName = () => {
+    setCompetitionName(tempCompName);
+    setIsEditingName(false);
   };
 
   const addTeam = () => {
@@ -82,9 +89,33 @@ export function SetupView() {
       <section className="mb-12 text-center">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-4">
           <Trophy className="w-20 h-20 text-primary" strokeWidth={1.5} />
-          <h1 className="text-8xl font-black tracking-tighter uppercase text-foreground">
-            Table <span className="text-primary">Wars!</span>
-          </h1>
+          
+          <div className="group relative">
+            {isEditingName ? (
+              <div className="flex gap-2">
+                <Input 
+                  value={tempCompName} 
+                  onChange={(e) => setTempCompName(e.target.value)} 
+                  className="text-4xl font-black h-16 w-[600px] text-center uppercase tracking-tighter"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateCompName()}
+                />
+                <Button onClick={handleUpdateCompName} className="h-16 font-black uppercase">Save</Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <h1 className="text-8xl font-black tracking-tighter uppercase text-foreground">
+                  {competitionName.split(' ').map((word, i) => (
+                    <span key={i} className={i === competitionName.split(' ').length - 1 ? "text-primary ml-4" : ""}>{word} </span>
+                  ))}
+                </h1>
+                <Button variant="ghost" size="icon" onClick={() => setIsEditingName(true)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Edit2 size={24} className="text-slate-400" />
+                </Button>
+              </div>
+            )}
+          </div>
+          
           <p className="text-2xl text-muted-foreground font-medium tracking-wide max-w-2xl">
             Configure your teams, set the stage, and prepare for the ultimate event management showdown.
           </p>

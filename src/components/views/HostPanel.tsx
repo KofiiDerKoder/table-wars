@@ -134,11 +134,6 @@ export function HostPanel() {
             <h2 className="text-xl font-black tracking-tight flex items-center gap-2 text-foreground">
               <Trophy className="text-amber-500" /> STANDINGS
             </h2>
-            {session && (
-              <Badge variant="outline" className="font-mono text-xs border-primary/30 text-primary">
-                CODE: {session.code}
-              </Badge>
-            )}
           </div>
           {!session && (
             <Button 
@@ -245,6 +240,17 @@ export function HostPanel() {
               </div>
               <Button variant="ghost" size="icon" onClick={() => setCurrentRound(Math.min(5, currentRound + 1))}><ChevronRight /></Button>
             </div>
+            {session && (
+              <>
+                <Separator orientation="vertical" className="h-8 bg-border" />
+                <div className="flex flex-col">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Session Code</p>
+                  <Badge variant="outline" className="font-mono text-lg border-primary/30 text-primary py-0 px-2 h-7">
+                    {session.code}
+                  </Badge>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

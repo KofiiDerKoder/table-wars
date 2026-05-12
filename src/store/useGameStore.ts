@@ -42,6 +42,7 @@ export interface SessionInfo {
 }
 
 interface GameState {
+  competitionName: string;
   currentView: View;
   projectorMode: ProjectorMode;
   announcementText: string;
@@ -76,6 +77,7 @@ interface GameState {
   };
   tiebreakerTeams: string[];
   session: SessionInfo | null;
+  setCompetitionName: (name: string) => Promise<void>;
   setCurrentRound: (round: number) => Promise<void>;
   setAnnouncement: (text: string) => Promise<void>;
   setGameStatus: (status: 'idle' | 'running' | 'paused' | 'finished') => Promise<void>;
@@ -200,6 +202,7 @@ export const useGameStore = create<GameState>((set, get) => {
   const initialState: Partial<GameState> = savedState || {};
 
   return {
+    competitionName: initialState.competitionName || 'Table Wars!',
     currentView: initialState.currentView || 'setup',
     projectorMode: initialState.projectorMode || 'logo',
     announcementText: initialState.announcementText || '',
@@ -215,6 +218,18 @@ export const useGameStore = create<GameState>((set, get) => {
     duel: initialState.duel || { challengerId: null, challengedId: null, winnerId: null, isActive: false },
     session: initialState.session || null,
     tiebreakerTeams: [] as string[],
+
+    setCompetitionName: async (name: string) => {
+      set({ competitionName: name });
+      broadcastUpdate({ competitionName: name });
+      saveStateToLocalStorage({ competitionName: name });
+      const { session } = get();
+      if (session) {
+        await supabase.from('game_state').update({ competition_name: name }).eq('session_id', session.id);
+      } else {
+        await supabase.from('game_state').update({ competition_name: name }).eq('id', 1);
+      }
+    },
 
     detectTies: () => {
       const { teams } = get();
