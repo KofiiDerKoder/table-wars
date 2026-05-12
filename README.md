@@ -67,8 +67,8 @@ The project has been organized into a clean, documentation-first structure:
 
 ## 📖 Documentation
 
-For in-depth information about the competition rounds, scoring rules, and technical architecture, please refer to the `docs/` directory:
-
+-   [**Host User Guide**](docs/public/HOST_GUIDE.md): Master the game controls and shortcuts.
+-   [**Technical Overview**](docs/public/TECHNICAL_OVERVIEW.md): Architecture and sync engine details.
 -   [Project Overview](docs/Table_Wars_Project_Documentation.md)
 -   [Design Details](docs/Table_Wars_Design_Intricate_Details.md)
 -   [Functional Assessment](docs/FUNCTIONAL_ASSESSMENT.md)
