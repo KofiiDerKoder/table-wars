@@ -73,11 +73,31 @@ export function LiveScoreboard() {
       
       <AnimatePresence>
         {projectorMode === 'announcement' && announcementText && (
-          <motion.div initial={{ y: -100 }} animate={{ y: 0 }} exit={{ y: -100 }}
-            className="fixed top-0 left-0 right-0 bg-primary text-white py-4 md:py-6 px-4 md:px-12 z-50 flex items-center justify-center gap-4 shadow-xl"
+          <motion.div 
+            initial={{ y: -100 }} 
+            animate={{ y: 0 }} 
+            exit={{ y: -100 }}
+            className="fixed top-0 left-0 right-0 bg-primary text-white py-6 md:py-8 z-50 overflow-hidden shadow-2xl flex items-center"
           >
-            <MessageSquare size={24} className="shrink-0 md:w-10 md:h-10" />
-            <span className="text-xl md:text-4xl font-black uppercase tracking-widest">{announcementText}</span>
+            <div className="absolute left-10 z-10 bg-primary pr-8 shadow-[20px_0_20px_-10px_rgba(var(--primary),1)]">
+              <MessageSquare size={40} className="md:w-12 md:h-12" />
+            </div>
+            
+            <div className="flex whitespace-nowrap">
+              <motion.div
+                animate={{ x: [0, -1000] }}
+                transition={{ 
+                  duration: 20, 
+                  repeat: Infinity, 
+                  ease: "linear" 
+                }}
+                className="flex gap-20 items-center px-10"
+              >
+                <span className="text-3xl md:text-6xl font-black uppercase tracking-[0.2em]">{announcementText}</span>
+                <span className="text-3xl md:text-6xl font-black uppercase tracking-[0.2em]">{announcementText}</span>
+                <span className="text-3xl md:text-6xl font-black uppercase tracking-[0.2em]">{announcementText}</span>
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

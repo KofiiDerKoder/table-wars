@@ -45,17 +45,49 @@ export function GlobalListeners() {
     return () => clearTimeout(timerDelay);
   }, [currentRound, startTimer]);
 
-  // Keyboard Shortcuts
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      // Don't trigger shortcuts if user is typing in an input or textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        return;
+      }
 
       const s = useGameStore.getState();
 
-      switch (e.code) {
-        case 'Space':
+      switch (e.key) {
+        // Navigation Shortcuts
+        case '1': setView('setup'); break;
+        case '2': setView('host'); break;
+        case '3': setView('scoreboard'); break;
+        case '4': setView('team'); break;
+        case '5': setView('results'); break;
+        
+        // Mode Shortcuts
+        case 'l': case 'L': setProjectorMode('logo'); break;
+        case 'b': case 'B': setProjectorMode('black'); break;
+        case 's': case 'S': setProjectorMode('scoreboard'); break;
+        case 'a': case 'A': setProjectorMode('announcement'); break;
+        case 'i': case 'I': setProjectorMode('intro'); break;
+
+        // Action Shortcuts
+        case ' ':
           e.preventDefault();
-          revealContent();
+          if (s.quiz.buzzedTeamId) {
+            clearBuzz();
+          } else {
+            revealContent();
+          }
+          break;
+        case 'Escape':
+          if (s.quiz.buzzedTeamId) {
+            clearBuzz();
+          } else {
+            setProjectorMode('logo');
+          }
+          break;
+        case 't': case 'T':
+          toggleTimer();
           break;
         case 'ArrowRight':
           if (s.currentRound === 1 || s.currentRound === 5) {
@@ -64,46 +96,21 @@ export function GlobalListeners() {
           }
           if (s.currentRound === 4) nextTasteItem();
           break;
-        case 'KeyT':
-          toggleTimer();
-          break;
-        case 'KeyB':
-          setProjectorMode(s.projectorMode === 'black' ? 'scoreboard' : 'black');
-          break;
-        case 'KeyL':
-          setProjectorMode(s.projectorMode === 'logo' ? 'scoreboard' : 'logo');
-          break;
-        case 'KeyS':
-          setView('scoreboard');
-          router.push('/scoreboard');
-          break;
-        case 'KeyH':
-          setView('host');
-          router.push('/host');
-          break;
-        case 'Escape':
-          clearBuzz();
-          break;
-        case 'Digit1':
-        case 'Digit2':
-        case 'Digit3':
-        case 'Digit4':
-        case 'Digit5':
-        case 'Digit6':
-        case 'Digit7':
-        case 'Digit8':
-          const teamIdx = parseInt(e.key) - 1;
-          if (s.teams[teamIdx] && (s.currentRound === 1 || s.currentRound === 5)) {
-            buzzIn(s.teams[teamIdx].id);
-            SoundEngine.playBuzzer();
-          }
-          break;
+      }
+
+      // Quick Buzz (Digit 1-8)
+      if (/^[1-8]$/.test(e.key)) {
+        const teamIdx = parseInt(e.key) - 1;
+        if (s.teams[teamIdx] && (s.currentRound === 1 || s.currentRound === 5)) {
+          buzzIn(s.teams[teamIdx].id);
+          SoundEngine.playBuzzer();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [revealContent, nextQuestion, nextTasteItem, setProjectorMode, setView, router, clearBuzz, buzzIn, toggleTimer, stopTimer]);
+  }, [setView, setProjectorMode, clearBuzz, revealContent, toggleTimer, stopTimer, nextQuestion, nextTasteItem, buzzIn]);
 
   return null;
 }
