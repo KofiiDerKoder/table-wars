@@ -257,7 +257,19 @@ export const useGameStore = create<GameState>((set, get) => {
           currentView: state.current_view, 
           projectorMode: state.projector_mode,
           currentRound: state.current_round,
-          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active }
+          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active },
+          quiz: { 
+            questions: (state.quiz_questions as QuizQuestion[]) || [],
+            currentIndex: state.quiz_index,
+            isRevealed: state.quiz_revealed,
+            buzzedTeamId: state.buzzed_team_id
+          },
+          tasteTest: {
+            items: (state.taste_items as TasteItem[]) || [],
+            currentIndex: state.taste_index,
+            isRevealed: false,
+            itemsCustomized: false
+          }
         });
         if (teams) set({ teams: teams as Team[] });
       } else {
@@ -268,7 +280,19 @@ export const useGameStore = create<GameState>((set, get) => {
           currentView: state.current_view, 
           projectorMode: state.projector_mode,
           currentRound: state.current_round,
-          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active }
+          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active },
+          quiz: { 
+            questions: (state.quiz_questions as QuizQuestion[]) || [],
+            currentIndex: state.quiz_index,
+            isRevealed: state.quiz_revealed,
+            buzzedTeamId: state.buzzed_team_id
+          },
+          tasteTest: {
+            items: (state.taste_items as TasteItem[]) || [],
+            currentIndex: state.taste_index,
+            isRevealed: false,
+            itemsCustomized: false
+          }
         });
         if (teams) set({ teams: teams as Team[] });
       }
@@ -633,6 +657,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     setQuizQuestions: async (questions) => {
+      console.log('DEBUG: Setting quiz questions:', questions.length);
       const { session } = get();
       if (session) {
         await supabase.from('game_state').update({ quiz_questions: questions }).eq('session_id', session.id);

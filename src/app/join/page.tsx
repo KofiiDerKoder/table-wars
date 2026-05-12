@@ -23,6 +23,7 @@ export default function JoinPage() {
     setIsJoining(false);
     
     if (result) {
+      localStorage.setItem('tablewars-started', 'true');
       setView('team');
       router.push('/');
     } else {

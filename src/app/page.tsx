@@ -16,12 +16,21 @@ export default function GamePage() {
 
   useEffect(() => {
     setMounted(true);
+    const started = localStorage.getItem('tablewars-started');
+    if (started === 'true') {
+      setHasStarted(true);
+    }
   }, []);
+
+  const handleStart = () => {
+    setHasStarted(true);
+    localStorage.setItem('tablewars-started', 'true');
+  };
 
   if (!mounted) return null;
 
   if (!hasStarted) {
-    return <LandingScreen onStart={() => setHasStarted(true)} />;
+    return <LandingScreen onStart={handleStart} />;
   }
 
   switch (currentView) {
