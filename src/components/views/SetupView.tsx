@@ -81,6 +81,11 @@ export function SetupView() {
     if (teams.length < 3) return;
     setQuizQuestions(DEFAULT_QUIZ_QUESTIONS);
     setTasteItems(DEFAULT_TASTE_ITEMS);
+    
+    // Open Scoreboard in new window
+    const w = window.open('/scoreboard', '_blank', 'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+    if (w) w.focus();
+    
     setView('host');
   };
 
