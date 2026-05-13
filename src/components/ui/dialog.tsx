@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Dialog
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for modal interactions throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 "use client"
 
 import * as React from "react"

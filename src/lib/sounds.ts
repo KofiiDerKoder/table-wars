@@ -1,6 +1,17 @@
+/**
+ * TABLE WARS! - Sound Engine
+ * 
+ * This service generates all competition audio cues procedurally using the
+ * browser's Web Audio API (OscillatorNode). No external audio files are required,
+ * ensuring zero network latency for time-critical sounds like buzzers.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 export class SoundEngine {
   private static ctx: AudioContext | null = null;
 
+  /** Lazy-initializes the AudioContext (required by modern browser policies) */
   private static getCtx() {
     if (!this.ctx) {
       const AudioContextClass = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -12,6 +23,7 @@ export class SoundEngine {
     return this.ctx;
   }
 
+  /** Core helper to create an oscillator with a specific envelope */
   private static createOscillator(type: OscillatorType, freq: number, duration: number, volume: number = 0.1) {
     const ctx = this.getCtx();
     const osc = ctx.createOscillator();
@@ -30,7 +42,7 @@ export class SoundEngine {
     osc.stop(ctx.currentTime + duration);
   }
 
-  // Buzzer: A4 -> C#5 -> E5 (Major Triad)
+  /** Plays the buzzer sound effect (Major Triad: A4, C#5, E5) */
   static playBuzzer() {
     const freqs = [440, 554.37, 659.25];
     freqs.forEach((f, i) => {
@@ -38,7 +50,7 @@ export class SoundEngine {
     });
   }
 
-  // Correct: C5 -> E5 -> G5
+  /** Plays the success tone for correct answers (C5, E5, G5) */
   static playCorrect() {
     const freqs = [523.25, 659.25, 783.99];
     freqs.forEach((f, i) => {
@@ -46,7 +58,7 @@ export class SoundEngine {
     });
   }
 
-  // Wrong: 300Hz -> 200Hz (Sawtooth)
+  /** Plays a down-pitched 'wrong' tone (Sawtooth) */
   static playWrong() {
     const ctx = this.getCtx();
     const osc = ctx.createOscillator();
@@ -66,17 +78,17 @@ export class SoundEngine {
     osc.stop(ctx.currentTime + 0.3);
   }
 
-  // Timer alert: 880Hz (A5)
+  /** Plays a short ping for countdown alerts */
   static playTimerPing() {
     this.createOscillator('sine', 880, 0.15, 0.2);
   }
 
-  // Tick: 600Hz
+  /** Plays a short tick sound (used for timer interval) */
   static playTick() {
     this.createOscillator('sine', 600, 0.05, 0.08);
   }
 
-  // Celebration: C5-E5-G5-C6
+  /** Plays the victory fanfare (Major Arpeggio) */
   static playCelebration() {
     const freqs = [523.25, 659.25, 783.99, 1046.50];
     freqs.forEach((f, i) => {

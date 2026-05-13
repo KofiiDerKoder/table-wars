@@ -1,6 +1,16 @@
+/**
+ * TABLE WARS! - UI Component: Switch
+ * 
+ * Standard toggle switch based on Base UI. Used throughout the 
+ * administrative panels (e.g., Sudden Death toggle).
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 "use client"
 
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
+...
 
 import { cn } from "@/lib/utils"
 

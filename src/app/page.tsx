@@ -1,3 +1,13 @@
+/**
+ * TABLE WARS! - Main View Router
+ * 
+ * This is the primary entry point for the application. It acts as a 
+ * dynamic router, switching between different "Views" based on the
+ * global game state.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 'use client';
 
 import { useGameStore } from '@/store/useGameStore';
@@ -14,6 +24,11 @@ export default function GamePage() {
   const [hasStarted, setHasStarted] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  /**
+   * HYDRATION & PERSISTENCE CHECK
+   * We wait for mount to avoid hydration mismatch (SSR vs CSR).
+   * We also check localStorage to see if the user was already in a game.
+   */
   useEffect(() => {
     setMounted(true);
     const started = localStorage.getItem('tablewars-started');
@@ -27,12 +42,18 @@ export default function GamePage() {
     localStorage.setItem('tablewars-started', 'true');
   };
 
+  // Prevent hydration flicker
   if (!mounted) return null;
 
+  // Show landing gate if game hasn't "started" in this browser
   if (!hasStarted) {
     return <LandingScreen onStart={handleStart} />;
   }
 
+  /**
+   * VIEW ROUTING LOGIC
+   * The active screen is determined entirely by the 'currentView' in useGameStore.
+   */
   switch (currentView) {
     case 'setup':
       return <SetupView />;

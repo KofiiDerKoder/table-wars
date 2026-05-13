@@ -1,3 +1,10 @@
+/**
+ * TABLE WARS! - Page: host
+ * 
+ * Route handler for the host view.
+ * 
+ * Last Updated: May 13, 2026
+ */
 'use client';
 
 import dynamic from 'next/dynamic';

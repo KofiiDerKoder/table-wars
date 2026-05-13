@@ -1,3 +1,12 @@
+/**
+ * TABLE WARS! - UI Component: Tabs
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for organizing views and configuration content.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 "use client"
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"

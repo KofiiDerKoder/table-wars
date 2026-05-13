@@ -1,26 +1,56 @@
 # Table Wars! Mock Competition Report
 
-## Simulation Overview
-A mock competition was executed to test the full lifecycle of the Table Wars! application.
+**Last Updated:** May 13, 2026
+**Environment:** Localhost web app at `http://localhost:3000`
 
-## Scenario
-1.  **Setup**: Initialized 3 teams (Red, Blue, Green) via the `SetupView`.
-2.  **Round 1**: Quiz phase. Simulated scoring via `HostPanel`.
-3.  **Round 2-3**: Ongoing competition. Validated score aggregation.
-4.  **Round 4**: Taste test. Validated per-item scoring.
-5.  **Round 5**: Final quiz and ranking update.
-6.  **Completion**: Checked the `ResultsView`.
+---
 
-## Observations
-- **Teams Initialization**: Correctly created teams with unique colors and starting scores of 0.
-- **Score Updates**: Real-time propagation to the scoreboard worked consistently across all rounds.
-- **Ranking Logic**: The dynamic ranking system (up/down trends) accurately recalculated based on cumulative scores.
-- **Round Transitions**: Changing rounds via the `HostPanel` correctly updated the round title on the `LiveScoreboard`.
-- **Taste Test**: The granular scoring (per item) integrated correctly into the final round total.
+## 1. Simulation Overview
+A mock competition was executed to test the full lifecycle of the Table Wars! application, verifying team setup, host controls, real-time score updates, and the transition through all 5 rounds.
 
-## Issues Identified
-- **No Persistence Alert**: The app uses `localStorage` for `persist` middleware, but if the browser cache is cleared, all state resets instantly without warning.
-- **Navigation Feedback**: Navigating via `HostPanel` is responsive, but there is no visual indicator confirming that a round change has been successfully registered on the Scoreboard view.
+## 2. Mock Competition Procedure
 
-## Conclusion
-The application handles complex competition states effectively. The state management is robust enough for a live event, provided browser cache stability is maintained.
+### Phase 1: Setup & Initialization
+- Opened the app and initialized 3 teams (Alpha, Bravo, Charlie) via the `SetupView`.
+- Confirmed the `START COMPETITION` button enables correctly once minimum teams (3) are added.
+- Verified teams are created with unique colors and starting scores of 0.
+
+### Phase 2: Round 1 (Table Trivia)
+- Verified the host sees the question bank and answer options.
+- Tested the **Host Buzz Control**:
+    - Confirmed keyboard shortcuts (`1-8`) for host buzz work.
+    - Verified the visible host buzz-in panel in `src/components/RoundControls.tsx` is functional for localhost-only mode.
+- Marked a buzzed response as correct and confirmed `+5` points aggregated correctly.
+
+### Phase 3: Rounds 2-4 (Relay, Building, Taste Test)
+- **Round 2-3**: Validated placement scoring and penalty aggregation.
+- **Round 4 (Blind Taste Test)**: Verified granular scoring (per item). Confirmed that changing a score replaces the previous value rather than accumulating (Fix verified).
+- **Round Transitions**: Changing rounds via the `HostPanel` correctly updated titles on the `LiveScoreboard` and `TeamView`.
+
+### Phase 4: Round 5 (Grand Finale) & Completion
+- Tested the Duel mechanic and double-point scoring.
+- Finalized competition and confirmed the `ResultsView` accurately displays final standings, ranking trends, and awards.
+
+---
+
+## 3. Observations & Key Findings
+
+### Robustness
+- **State Synchronization**: Real-time propagation (via BroadcastChannel and Supabase) worked consistently across multiple tabs.
+- **Dynamic Ranking**: The ranking logic (up/down trends) accurately recalculated cumulative scores after every update.
+- **UI/UX**: Animations (Framer Motion) and audio cues (Web Audio API) provided professional-grade feedback.
+
+### Identified Issues & Technical Debt
+- **Persistence Alert**: While `localStorage` is used, clearing browser cache resets state instantly without warning. Recommend a "Backup/Restore" feature.
+- **Navigation Feedback**: Limited visual confirmation on the Host side when a round change is registered on the Scoreboard.
+- **Accessibility**: Lack of visible keyboard navigation indicators and ARIA labels.
+
+---
+
+## 4. Conclusion
+The application handles complex competition states effectively. The state management is robust enough for a live event. The recent addition of the visible Host Buzz panel significantly improves usability for localhost-only operations.
+
+## 5. Recommendations for New Developers
+- **Host Buzz Panel**: Use the visible panel in `QuizControls` for local testing.
+- **Persistence**: Be aware that state lives in `localStorage`; do not clear cache during an active event.
+- **Realtime**: Ensure Supabase credentials are correctly configured in `.env.local` for multi-device sync testing.

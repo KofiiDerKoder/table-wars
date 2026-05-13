@@ -1,3 +1,12 @@
+/**
+ * TABLE WARS! - Game Constants & Data
+ * 
+ * Contains default question banks and blind taste test items.
+ * Used for initializing the game store state.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 export const DEFAULT_QUIZ_QUESTIONS = [
   // ─── Round 1: Table Trivia (30 questions) ─────────────────────────
   // Science (6)

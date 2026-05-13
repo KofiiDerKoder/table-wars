@@ -1,44 +1,19 @@
-# Table Wars Competition — Full Project Documentation
+# Table Wars! — Master Technical Documentation
 
-> **Boarding House Dinner Table Competition Manager**
-> A Next.js 16 web application for running a 5-round inter-table competition with real-time scoring, presentation mode, buzzer system, and animated results.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Project Deliverables](#2-project-deliverables)
-3. [Development History & Steps](#3-development-history--steps)
-4. [Application Architecture](#4-application-architecture)
-5. [Five Views — Detailed](#5-five-views--detailed)
-6. [The Five Competition Rounds](#6-the-five-competition-rounds)
-7. [State Management](#7-state-management)
-8. [Sound System](#8-sound-system)
-9. [Presentation Mode](#9-presentation-mode)
-10. [Content & Data](#10-content--data)
-11. [Customization Features](#11-customization-features)
-12. [UI & Animation System](#12-ui--animation-system)
-13. [Technical Stack](#13-technical-stack)
-14. [File Structure](#14-file-structure)
-15. [Component Reference](#15-component-reference)
-16. [Known Bugs & Fixes](#16-known-bugs--fixes)
-17. [Configuration Files](#17-configuration-files)
-18. [Future Enhancements](#18-future-enhancements)
+**Last Updated:** May 13, 2026
+**Application:** Table Wars! Competition Manager
+**Stack:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand, Framer Motion, Supabase
 
 ---
 
 ## 1. Project Overview
 
-**Table Wars** is a boarding house dinner table competition where teams (dinner tables) compete across 5 rounds of challenges. The winning table earns the coveted prize of **first position at mealtimes for a week**. The system includes a web application to manage, host, and present the competition with full real-time scoring, animated leaderboards, buzzer mechanics, timer systems, and presentation software features inspired by tools like Presenter by WorshipTools.
+**Table Wars** is an interactive competition management platform designed for inter-table boarding house events. The system features real-time scoring, an animated presentation mode, and a robust buzzer mechanic.
 
-### Key Goals
-- Create a fun, competitive atmosphere between dining tables at a boarding house
-- Provide a digital tool for the game master/host to run the competition smoothly
-- Offer a projector-ready live scoreboard for audience engagement
-- Allow team captains to interact via mobile devices (buzz in, see scores)
-- Support customizable content (taste test items, quiz questions)
-- Include presentation mode features (black screen, logo, announcements, keyboard shortcuts)
+### Architecture Highlights
+- **Real-Time Sync**: Hybrid approach using `BroadcastChannel` (tabs) and `Supabase` (devices).
+- **Procedural Audio**: Oscillation-based sound effects via Web Audio API.
+- **Physics-Based UI**: Spring animations using Framer Motion.
 
 ---
 

@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Button
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for user interaction and trigger actions throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 

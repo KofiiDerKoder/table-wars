@@ -1,3 +1,10 @@
+/**
+ * TABLE WARS! - Page: join
+ * 
+ * Route handler for the join view.
+ * 
+ * Last Updated: May 13, 2026
+ */
 'use client';
 
 import { useGameStore } from '@/store/useGameStore';
@@ -9,31 +16,55 @@ import { Trophy, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+/**
+ * JoinPage component - Allows users to join a game session using a session code
+ */
 export default function JoinPage() {
-  const [code, setCode] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
-  const joinSession = useGameStore(s => s.joinSession);
-  const setView = useGameStore(s => s.setView);
-  const router = useRouter();
 
+  // State variables for session code and loading state
+  const [code, setCode] = useState(''); // Stores the session code input by user
+  const [isJoining, setIsJoining] = useState(false); // Tracks if join request is in progress
+
+
+  // Store and router hooks
+  const joinSession = useGameStore(s => s.joinSession); // Function to join a session from game store
+  const setView = useGameStore(s => s.setView); // Function to set the current view from game store
+  const router = useRouter(); // Router for navigation
+
+  /**
+   * Handles the join session process
+   * Validates code, attempts to join session, and handles response
+   */
   const handleJoin = async () => {
+    // Return if code is less than 6 characters
     if (code.length < 6) return;
+    // Set joining state to true to show loading indicator
     setIsJoining(true);
+    // Attempt to join session with uppercase code
     const result = await joinSession(code.toUpperCase());
+    // Reset joining state
     setIsJoining(false);
     
+    // If join was successful
     if (result) {
+      // Mark session as started in localStorage
       localStorage.setItem('tablewars-started', 'true');
+      // Set view to team
       setView('team');
+      // Navigate to home page
       router.push('/');
     } else {
+      // Show error message for invalid session code
       alert('Invalid session code. Please check with your host.');
     }
   };
 
+  // JSX for the join page UI
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans">
+      {/* Main card container */}
       <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl overflow-hidden">
+        {/* Card header with title and trophy icon */}
         <CardHeader className="text-center pt-10 pb-6 border-b border-slate-800">
           <Trophy className="mx-auto text-blue-500 mb-4" size={48} />
           <CardTitle className="text-3xl font-black tracking-tighter text-white uppercase">
@@ -41,7 +72,9 @@ export default function JoinPage() {
           </CardTitle>
           <p className="text-slate-500 font-medium text-sm mt-2 uppercase tracking-widest">Team Participation Portal</p>
         </CardHeader>
+        {/* Card content with input and button */}
         <CardContent className="p-8 space-y-8">
+          {/* Input section for session code */}
           <div className="space-y-4">
             <Label htmlFor="code" className="text-xs font-black uppercase tracking-widest text-slate-400">Enter Session Code</Label>
             <Input 
@@ -54,6 +87,7 @@ export default function JoinPage() {
             />
           </div>
 
+          {/* Join button with loading state */}
           <Button 
             onClick={handleJoin}
             disabled={code.length < 6 || isJoining}
@@ -68,6 +102,7 @@ export default function JoinPage() {
             )}
           </Button>
 
+          {/* Instruction text */}
           <p className="text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest px-4">
             Ask your game host for the 6-character code displayed at the top of their dashboard.
           </p>

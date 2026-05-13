@@ -1,3 +1,12 @@
+/**
+ * TABLE WARS! - Live Scoreboard View
+ * 
+ * The audience-facing view designed for projection. Features real-time 
+ * leaderboard, timer display, and dynamic projector mode overlays.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 'use client';
 
 import { useGameStore } from '@/store/useGameStore';
@@ -6,7 +15,12 @@ import { Crown, MessageSquare, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { clsx } from 'clsx';
 
+/**
+ * Renders the scoreboard. Switches layout/content based on `projectorMode`
+ * set in the global game store.
+ */
 export function LiveScoreboard() {
+  // --- Global Store State ---
   const teams = useGameStore(s => s.teams);
   const competitionName = useGameStore(s => s.competitionName);
   const currentRound = useGameStore(s => s.currentRound);
@@ -17,16 +31,21 @@ export function LiveScoreboard() {
   const quiz = useGameStore(s => s.quiz);
   const tasteTest = useGameStore(s => s.tasteTest);
 
+  // --- Derived State ---
   const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
   const maxScore = Math.max(...teams.map(t => t.score), 10);
 
   const currentQuestion = quiz.questions[quiz.currentIndex];
   const currentTasteItem = tasteTest.items[tasteTest.currentIndex];
 
+  // --- Projector Mode Handling ---
+
+  // Black screen mode
   if (projectorMode === 'black') {
     return <div className="fixed inset-0 bg-background z-[100]" />;
   }
 
+  // Logo mode
   if (projectorMode === 'logo') {
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-[100] p-4">
@@ -43,6 +62,7 @@ export function LiveScoreboard() {
     );
   }
 
+  // Intro mode (highlights specific team)
   if (projectorMode === 'intro') {
     const introTeam = teams.find(t => t.id === introTeamId);
     return (
@@ -64,13 +84,14 @@ export function LiveScoreboard() {
     );
   }
 
-  // Question/Taste Item Display (shown when revealed via Space key)
+  // Question/Taste Item Display (Conditional Overlay)
   const showQuestionOverlay = quiz.isRevealed && currentQuestion && (currentRound === 1 || currentRound === 5);
   const showTasteOverlay = tasteTest.isRevealed && currentTasteItem && currentRound === 4;
 
   return (
     <div className="min-h-screen bg-muted/50 p-4 md:p-12 text-foreground font-sans selection:bg-primary/20">
-      
+
+      {/* Announcement Banner Overlay */}
       <AnimatePresence>
         {projectorMode === 'announcement' && announcementText && (
           <motion.div 
@@ -82,7 +103,7 @@ export function LiveScoreboard() {
             <div className="absolute left-10 z-10 bg-primary pr-8 shadow-[20px_0_20px_-10px_rgba(var(--primary),1)]">
               <MessageSquare size={40} className="md:w-12 md:h-12" />
             </div>
-            
+
             <div className="flex whitespace-nowrap">
               <motion.div
                 animate={{ x: [0, -1000] }}
@@ -118,117 +139,4 @@ export function LiveScoreboard() {
             </div>
           </div>
         </div>
-
-        <div className="flex-1 flex flex-col gap-4 md:gap-6 max-w-7xl mx-auto w-full relative">
-          {/* Question/Taste Overlay — replaces leaderboard when revealed */}
-          {(showQuestionOverlay || showTasteOverlay) ? (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={showQuestionOverlay ? 'question' : 'taste'}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="flex-1 flex items-center justify-center"
-              >
-                {showQuestionOverlay && currentQuestion && (
-                  <div className="max-w-4xl w-full text-center space-y-8">
-                    <Badge variant="outline" className="text-lg font-black px-6 py-2">
-                      {currentQuestion.category}
-                    </Badge>
-                    <h2 className="text-4xl md:text-6xl font-black leading-tight text-foreground">
-                      {currentQuestion.text}
-                    </h2>
-                    <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
-                      {currentQuestion.options.map((opt, i) => (
-                        <div key={i} className="p-5 rounded-xl border-2 border-border bg-white font-bold text-xl">
-                          {String.fromCharCode(65 + i)}) {opt}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {showTasteOverlay && currentTasteItem && (
-                  <div className="max-w-4xl w-full text-center space-y-8">
-                    <Badge variant="outline" className="text-lg font-black px-6 py-2">
-                      {currentTasteItem.category}
-                    </Badge>
-                    <h2 className="text-4xl md:text-6xl font-black leading-tight text-foreground">
-                      {currentTasteItem.name}
-                    </h2>
-                    {currentTasteItem.hint && (
-                      <p className="text-2xl md:text-3xl text-muted-foreground italic mt-4">
-                        Hint: "{currentTasteItem.hint}"
-                      </p>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          ) : (
-            <>
-          <div className="flex items-center justify-between">
-             <h2 className="text-2xl md:text-4xl font-black uppercase tracking-widest text-foreground">Current Standings</h2>
-             <Badge variant="outline" className="text-sm md:text-base font-black px-4 py-1">
-               {teams.length} Teams Competing
-             </Badge>
-          </div>
-          <motion.div className="flex-1 flex flex-col gap-4 md:gap-6 w-full">
-            <AnimatePresence mode="popLayout">
-              {sortedTeams.map((team, idx) => (
-                <motion.div
-                  key={team.id}
-                  layout
-                  initial={{ opacity: 0, x: -50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className={clsx(
-                    "relative flex items-center gap-4 md:gap-8 p-4 md:p-8 rounded-2xl md:rounded-3xl transition-all border",
-                    idx === 0 ? "bg-white border-primary/20 shadow-2xl scale-[1.01]" : "bg-white border-slate-100 shadow-lg"
-                  )}
-                >
-                  <div className="w-12 h-12 md:w-20 md:h-20 flex items-center justify-center shrink-0">
-                    {idx === 0 ? (
-                      <Crown size={24} className="md:w-12 md:h-12 text-primary" />
-                    ) : (
-                      <div className="text-2xl md:text-5xl font-black text-slate-300 tabular-nums">
-                        {(idx + 1).toString().padStart(2, '0')}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 space-y-1 md:space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xl md:text-4xl font-black uppercase tracking-tight">{team.name}</h3>
-                      <div className="flex gap-1 md:gap-2">
-                        {[1, 2, 3, 4, 5].map(r => (
-                          <div key={r} className={clsx("w-2 h-2 md:w-3 md:h-3 rounded-full", team.roundScores[r] ? "bg-primary" : "bg-slate-200")} />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="h-2 md:h-4 bg-slate-100 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(team.score / maxScore) * 100}%` }}
-                        className="h-full rounded-full"
-                        style={{ backgroundColor: team.color }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="text-right min-w-[80px] md:min-w-[150px]">
-                    <motion.div className="text-3xl md:text-7xl font-black tabular-nums leading-none">
-                      {team.score}
-                    </motion.div>
-                    <p className="text-[10px] md:text-xs font-black text-muted-foreground uppercase tracking-widest mt-1 md:mt-2">Points</p>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+...

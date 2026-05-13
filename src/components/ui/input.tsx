@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Input
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for text entry forms and input fields throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
 

@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Progress
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for showing completion status or progress tracking throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 "use client"
 
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress"

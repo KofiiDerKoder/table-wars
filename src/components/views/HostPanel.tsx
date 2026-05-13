@@ -1,3 +1,14 @@
+/**
+ * TABLE WARS! - Host Command Center
+ * 
+ * The Host Panel is the administrative interface for the Game Master.
+ * It provides granular control over every aspect of the competition,
+ * including round management, team editing, timer control, and
+ * projector mode switching.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 'use client';
 
 import { useGameStore, ProjectorMode } from '@/store/useGameStore';
@@ -53,6 +64,7 @@ import { LiveScoreboard } from './LiveScoreboard';
 const TIMER_PRESETS = [30, 60, 90, 120];
 
 export function HostPanel() {
+  // --- Global Game State (Zustand) ---
   const teams = useGameStore(s => s.teams);
   const currentRound = useGameStore(s => s.currentRound);
   const projectorMode = useGameStore(s => s.projectorMode);
@@ -61,6 +73,7 @@ export function HostPanel() {
   const isSuddenDeath = useGameStore(s => s.isSuddenDeath);
   const introTeamId = useGameStore(s => s.introTeamId);
 
+  // --- Global Game Actions (Zustand) ---
   const setCurrentRound = useGameStore(s => s.setCurrentRound);
   const setProjectorMode = useGameStore(s => s.setProjectorMode);
   const setAnnouncement = useGameStore(s => s.setAnnouncement);
@@ -76,6 +89,7 @@ export function HostPanel() {
   const session = useGameStore(s => s.session);
   const createSession = useGameStore(s => s.createSession);
 
+  // --- Local UI State ---
   const [customTimer, setCustomTimer] = useState('');
   const [shortcutsVisible, setShortcutsVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -85,6 +99,7 @@ export function HostPanel() {
   const [editingColor, setEditingColor] = useState('');
   const [editingChant, setEditingChant] = useState('');
 
+  /** Sets the timer to a custom value provided in the input */
   const handleCustomTimer = () => {
     const sec = parseInt(customTimer);
     if (!isNaN(sec) && sec > 0) {
@@ -93,6 +108,7 @@ export function HostPanel() {
     }
   };
 
+  /** Opens the team editing dialog */
   const handleEditClick = (team: any) => {
     setEditTeamId(team.id);
     setEditingName(team.name);
@@ -100,6 +116,7 @@ export function HostPanel() {
     setEditingChant(team.chant || '');
   };
 
+  /** Persists team metadata changes to the store */
   const handleSaveTeam = async () => {
     if (editTeamId) {
       await updateTeam(editTeamId, {

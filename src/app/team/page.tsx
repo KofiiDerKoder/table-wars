@@ -1,3 +1,10 @@
+/**
+ * TABLE WARS! - Page: team
+ * 
+ * Route handler for the team view.
+ * 
+ * Last Updated: May 13, 2026
+ */
 'use client';
 
 import dynamic from 'next/dynamic';

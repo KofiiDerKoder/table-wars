@@ -1,3 +1,12 @@
+/**
+ * TABLE WARS! - Results View
+ * 
+ * The final screen shown after a competition concludes. Handles ranking,
+ * ties (sudden death), celebratory confetti, and export functionality (PDF).
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 'use client';
 
 import { useGameStore } from '@/store/useGameStore';
@@ -13,11 +22,14 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 export function ResultsView() {
+  // --- Global Store State ---
   const teams = useGameStore(s => s.teams);
   const resetAll = useGameStore(s => s.resetAll);
   const competitionName = useGameStore(s => s.competitionName);
+  
   const router = useRouter();
   
+  // --- Local UI State ---
   const [revealIndex, setRevealIndex] = useState(-1);
   const [hasVoted, setHasVoted] = useState(false);
   const [tiebreakerActive, setTiebreakerActive] = useState(false);
@@ -25,6 +37,9 @@ export function ResultsView() {
 
   const sortedTeams = [...teams].sort((a, b) => a.score - b.score);
 
+  /** 
+   * Captures the hidden PDF report div as a canvas and triggers a download.
+   */
   const exportResultsPDF = async () => {
     setIsExporting(true);
     const element = document.getElementById('pdf-report-layout');
@@ -40,6 +55,7 @@ export function ResultsView() {
     setIsExporting(false);
   };
 
+  /** Identifies teams tied for the current highest score */
   const detectTies = () => {
     if (teams.length < 2) return [];
     const highToLow = [...teams].sort((a, b) => b.score - a.score);
@@ -50,6 +66,7 @@ export function ResultsView() {
 
   const ties = detectTies();
 
+  // --- Tiebreaker Logic ---
   if (tiebreakerActive && ties.length > 0) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-12 flex flex-col items-center justify-center font-sans">
@@ -103,6 +120,7 @@ export function ResultsView() {
     setRevealIndex(0);
   };
 
+  /** Reveal effect: sequentially reveal teams every 2s */
   useEffect(() => {
     if (revealIndex >= 0 && revealIndex < sortedTeams.length) {
       const timer = setTimeout(() => {
@@ -117,6 +135,7 @@ export function ResultsView() {
 
   return (
     <div className="min-h-screen bg-muted/30 p-12 flex flex-col items-center font-sans">
+      {/* Hidden layout for PDF Export */}
       <div id="pdf-report-layout" className="hidden w-[800px] bg-white text-slate-900 p-16 font-sans">
         <div className="text-center mb-12 border-b-4 border-slate-900 pb-8">
           <h1 className="text-5xl font-black uppercase tracking-tighter mb-2">{competitionName}</h1>
@@ -161,6 +180,7 @@ export function ResultsView() {
         </div>
       </div>
 
+      {/* Main Results View */}
       <div id="results-content" className="w-full flex flex-col items-center">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-16">
           <h1 className="text-7xl font-black tracking-tighter mb-4 uppercase text-foreground">
@@ -221,6 +241,7 @@ export function ResultsView() {
         )}
       </div>
 
+      {/* Footer controls */}
       {revealIndex >= sortedTeams.length && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-16 space-y-12 max-w-4xl w-full">
           {ties.length > 1 && (

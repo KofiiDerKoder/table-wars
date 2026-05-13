@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Badge
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for displaying status indicators or tags in the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"

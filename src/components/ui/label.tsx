@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Label
+ * 
+ * Standard UI component based on Shadcn. 
+ * Used for form field labeling and accessibility text throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 "use client"
 
 import * as React from "react"

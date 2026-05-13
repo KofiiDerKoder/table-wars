@@ -1,6 +1,16 @@
+/**
+ * TABLE WARS! - UI Component: Separator
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for visual separation in control panels.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 "use client"
 
 import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"
+...
 
 import { cn } from "@/lib/utils"
 

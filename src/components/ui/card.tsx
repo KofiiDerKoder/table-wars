@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Card
+ * 
+ * Standard UI component based on Shadcn. 
+ * Used for containerized content layouts across the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

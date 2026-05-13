@@ -1,23 +1,41 @@
+/**
+ * TABLE WARS! - Core Game Store
+ * 
+ * This file is the primary engine of the application. It manages game state,
+ * scoring, timers, and synchronization across multiple tabs and devices.
+ * 
+ * Last Updated: May 13, 2026
+ */
+
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 
+// --- Types & Interfaces ---------------------------------------------------
+
+/** High-level application views */
 export type View = 'setup' | 'host' | 'scoreboard' | 'team' | 'results';
+
+/** Display modes for the projector scoreboard */
 export type ProjectorMode = 'scoreboard' | 'black' | 'logo' | 'announcement' | 'intro';
 
+/** Represents a competing table/team */
 export type Team = {
   id: string;
   name: string;
   color: string;
   score: number;
+  /** Cumulative points per round (1-5) */
   roundScores: Record<number, number>;
   rank: number;
   rankTrend: 'up' | 'down' | 'stable';
   chant?: string;
   memberCount: number;
+  /** Granular scores for Round 4 items */
   tasteItemScores: Record<string, number>;
   teamSecret?: string;
 };
 
+/** Round 1 & 5 trivia structure */
 export interface QuizQuestion {
   id: string;
   text: string;
@@ -26,6 +44,7 @@ export interface QuizQuestion {
   category: string;
 }
 
+/** Round 4 blind taste item structure */
 export interface TasteItem {
   id: string;
   name: string;
@@ -34,6 +53,7 @@ export interface TasteItem {
   hint?: string;
 }
 
+/** Meta-info for the active multi-device session */
 export interface SessionInfo {
   id: string;
   code: string;
@@ -41,7 +61,9 @@ export interface SessionInfo {
   joinedTeamId?: string;
 }
 
+/** The unified state shape for Table Wars */
 interface GameState {
+  // --- Competition Metadata ---
   competitionName: string;
   currentView: View;
   projectorMode: ProjectorMode;
@@ -49,14 +71,21 @@ interface GameState {
   introTeamId: string | null;
   showConfidenceMonitor: boolean;
   teams: Team[];
+  
+  // --- Timer Engine ---
   timer: {
     duration: number;
     remaining: number;
     isActive: boolean;
   };
+  
+  // --- Game Mechanics ---
   currentRound: number;
   isSuddenDeath: boolean;
+  /** Used for the Undo Score feature */
   lastScoreChange: { teamId: string; points: number; round: number } | null;
+  
+  // --- Round-Specific Data ---
   quiz: {
     questions: QuizQuestion[];
     currentIndex: number;
@@ -77,6 +106,8 @@ interface GameState {
   };
   tiebreakerTeams: string[];
   session: SessionInfo | null;
+
+  // --- Actions ---
   setCompetitionName: (name: string) => Promise<void>;
   setCurrentRound: (round: number) => Promise<void>;
   setAnnouncement: (text: string) => Promise<void>;
@@ -120,7 +151,12 @@ interface GameState {
   loadFromLocalStorage: () => boolean;
 }
 
-// ─── Cross-Tab Sync (BroadcastChannel API) ────────────────────────────────
+// ─── Synchronization Engine ───────────────────────────────────────────────
+
+/**
+ * BroadcastChannel ensures that if a user has multiple tabs open on the same
+ * machine (e.g., Host Panel and Scoreboard), they stay in sync instantly.
+ */
 let broadcastChannel: BroadcastChannel | null = null;
 
 function initBroadcastChannel(set: (fn: (state: GameState) => Partial<GameState>) => void) {
@@ -134,7 +170,7 @@ function initBroadcastChannel(set: (fn: (state: GameState) => Partial<GameState>
       }
     };
   } catch {
-    // BroadcastChannel not supported
+    // BroadcastChannel not supported in this browser
   }
 }
 
@@ -148,9 +184,14 @@ function broadcastUpdate(partial: Record<string, unknown>) {
   }
 }
 
-// ─── localStorage Persistence ─────────────────────────────────────────────
+// ─── Persistence Logic ────────────────────────────────────────────────────
+
 const STORAGE_KEY = 'tablewars-state';
 
+/**
+ * Persists critical game state to localStorage to survive page refreshes.
+ * State is timestamped and considered stale after 24 hours.
+ */
 function saveStateToLocalStorage(state: Partial<GameState>) {
   if (typeof window === 'undefined') return;
   try {
@@ -169,7 +210,7 @@ function saveStateToLocalStorage(state: Partial<GameState>) {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
   } catch {
-    // localStorage not available
+    // localStorage unavailable
   }
 }
 
@@ -179,7 +220,6 @@ function loadStateFromLocalStorage(): Partial<GameState> | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // Only load if saved within last 24 hours
     if (Date.now() - (data.timestamp || 0) > 24 * 60 * 60 * 1000) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
@@ -190,18 +230,18 @@ function loadStateFromLocalStorage(): Partial<GameState> | null {
   }
 }
 
-// ─── Zustand Store ───────────────────────────────────────────────────────
+// ─── The Game Store ───────────────────────────────────────────────────────
 
 export const useGameStore = create<GameState>((set, get) => {
   if (typeof window !== 'undefined') {
     initBroadcastChannel(set);
   }
 
-  // Load from localStorage on init
   const savedState = loadStateFromLocalStorage();
   const initialState: Partial<GameState> = savedState || {};
 
   return {
+    // --- Initial State ---
     competitionName: initialState.competitionName || 'Table Wars!',
     currentView: initialState.currentView || 'setup',
     projectorMode: initialState.projectorMode || 'logo',
@@ -218,6 +258,8 @@ export const useGameStore = create<GameState>((set, get) => {
     duel: initialState.duel || { challengerId: null, challengedId: null, winnerId: null, isActive: false },
     session: initialState.session || null,
     tiebreakerTeams: [] as string[],
+
+    // --- State Actions ---
 
     setCompetitionName: async (name: string) => {
       set({ competitionName: name });
@@ -247,10 +289,13 @@ export const useGameStore = create<GameState>((set, get) => {
       set({ tiebreakerTeams: teamIds });
     },
 
+    /**
+     * Bootstraps the application state by pulling from Supabase.
+     * Supports both legacy single-game and modern session-based modes.
+     */
     initialize: async () => {
       const { session } = get();
       if (session) {
-        // Load from Supabase session
         const { data: state } = await supabase.from('game_state').select('*').eq('session_id', session.id).single();
         const { data: teams } = await supabase.from('teams').select('*').eq('session_id', session.id);
         if (state) set({ 
@@ -273,7 +318,6 @@ export const useGameStore = create<GameState>((set, get) => {
         });
         if (teams) set({ teams: teams as Team[] });
       } else {
-        // Load from legacy single-row game_state
         const { data: state } = await supabase.from('game_state').select('*').eq('id', 1).single();
         const { data: teams } = await supabase.from('teams').select('*');
         if (state) set({ 
@@ -381,7 +425,6 @@ export const useGameStore = create<GameState>((set, get) => {
       saveStateToLocalStorage({ teams });
       const { session } = get();
       if (session) {
-        // Set session_id on each team
         const teamsWithSession = teams.map(t => ({ ...t, session_id: session.id }));
         await supabase.from('teams').upsert(teamsWithSession);
       } else {
@@ -657,7 +700,6 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     setQuizQuestions: async (questions) => {
-      console.log('DEBUG: Setting quiz questions:', questions.length);
       const { session } = get();
       if (session) {
         await supabase.from('game_state').update({ quiz_questions: questions }).eq('session_id', session.id);
@@ -677,7 +719,6 @@ export const useGameStore = create<GameState>((set, get) => {
       saveStateToLocalStorage({ quiz: newQuiz });
 
       if (session) {
-        // Use the lock_buzz_for_question function for real-time buzz locking
         const { data } = await supabase.rpc('lock_buzz_for_question', {
           p_session_id: session.id,
           p_team_id: teamId,
@@ -784,9 +825,9 @@ export const useGameStore = create<GameState>((set, get) => {
       saveStateToLocalStorage({ teams: get().teams });
     },
 
-    // ─── Session Management ───────────────────────────────────────────────
+    // --- Multi-Device Session Management ---
+    
     createSession: async () => {
-      // Generate a unique 6-char code
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code = '';
       for (let i = 0; i < 6; i++) {
@@ -804,7 +845,6 @@ export const useGameStore = create<GameState>((set, get) => {
         return null;
       }
 
-      // Create initial game_state for the session
       const { teams, currentRound, projectorMode, announcementText, quiz, tasteTest } = get();
       const { error: gsError } = await supabase
         .from('game_state')
@@ -825,16 +865,14 @@ export const useGameStore = create<GameState>((set, get) => {
         return null;
       }
 
-      // Insert existing teams if any
       if (teams.length > 0) {
         const teamsToInsert = teams.map(t => ({
           ...t,
-          id: t.id, // Keep the same ID
+          id: t.id,
           session_id: data.id,
           round_scores: t.roundScores,
           taste_item_scores: t.tasteItemScores
         }));
-        // Remove local-only fields if they aren't in the DB schema
         const cleanedTeams = teamsToInsert.map(({ roundScores, tasteItemScores, rankTrend, memberCount, ...rest }) => ({
           ...rest,
           round_scores: roundScores,
@@ -880,7 +918,6 @@ export const useGameStore = create<GameState>((set, get) => {
       set({ session: sessionInfo });
       saveStateToLocalStorage({ session: sessionInfo });
 
-      // Subscribe to realtime updates for this session
       const channel = supabase.channel(`session:${session.id}`);
       channel
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `session_id=eq.${session.id}` }, (payload) => {
@@ -938,7 +975,8 @@ export const useGameStore = create<GameState>((set, get) => {
   };
 });
 
-// ─── Supabase Realtime Subscriptions (Legacy Fallback) ────────────────────
+// ─── Supabase Realtime Subscriptions (Legacy / Single Game) ────────────────
+
 let channel: ReturnType<typeof supabase.channel> | null = null;
 
 if (typeof window !== 'undefined') {
@@ -947,7 +985,6 @@ if (typeof window !== 'undefined') {
   channel
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state' }, (payload: { new: Record<string, unknown> }) => {
       const n = payload.new as Record<string, unknown>;
-      // Only apply if NOT session-scoped (legacy mode)
       if (!n.session_id) {
         useGameStore.setState({ 
           currentView: n.current_view as View ?? undefined,

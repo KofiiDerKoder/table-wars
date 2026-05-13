@@ -1,3 +1,11 @@
+/**
+ * TABLE WARS! - UI Component: Scroll Area
+ * 
+ * Standard UI component based on Base UI. 
+ * Used for scrollable container regions throughout the application.
+ * 
+ * Last Updated: May 13, 2026
+ */
 "use client"
 
 import * as React from "react"
