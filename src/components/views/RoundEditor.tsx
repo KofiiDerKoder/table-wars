@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,10 +10,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { GripVertical, Plus, Trash2, Settings, Copy, ChevronDown, ChevronUp, Timer, Trophy, ChefHat, Swords, Sparkles, Zap } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DEFAULT_QUIZ_QUESTIONS, DEFAULT_TASTE_ITEMS } from '@/lib/constants';
+import { parseCSV, parseBulkPaste, parseJSON, questionsToQuizQuestion, type ParsedQuestion } from '@/lib/importUtils';
+import { GripVertical, Plus, Trash2, Settings, Copy, ChevronDown, ChevronUp, Timer, Trophy, ChefHat, Swords, Sparkles, Zap, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 import type { RoundDefinition, RoundType } from '@/types/rounds';
+import type { QuizQuestion } from '@/store/useGameStore';
 
 interface JudgingCriterion {
   id: string;
@@ -103,6 +107,181 @@ function RoundCard({ round, index, total, onEdit, onRemove, onMoveUp, onMoveDown
   );
 }
 
+function QuestionImportDialog({
+  open,
+  onOpenChange,
+  onImport,
+  roundType,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onImport: (questions: QuizQuestion[]) => void;
+  roundType?: string;
+}) {
+  const [activeTab, setActiveTab] = useState('csv');
+  const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkText, setBulkText] = useState('');
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      setParsedQuestions([]);
+      setError(null);
+      setBulkText('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+    onOpenChange(open);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      if (!content) { setError('Failed to read file'); return; }
+      let parsed: ParsedQuestion[];
+      if (file.name.endsWith('.json')) {
+        parsed = parseJSON(content);
+      } else {
+        parsed = parseCSV(content);
+      }
+      if (parsed.length === 0) { setError('No valid questions found in file'); return; }
+      setParsedQuestions(parsed);
+    };
+    reader.onerror = () => setError('Failed to read file');
+    reader.readAsText(file);
+  };
+
+  const handleBulkParse = () => {
+    setError(null);
+    if (!bulkText.trim()) { setError('Paste some questions first'); return; }
+    const parsed = parseBulkPaste(bulkText);
+    if (parsed.length === 0) { setError('No valid questions found. Use format: Question | A | B | C | D | correct | Category'); return; }
+    setParsedQuestions(parsed);
+  };
+
+  const handleLoadDefaults = (type: 'trivia' | 'finale' | 'taste') => {
+    setError(null);
+    let parsed: ParsedQuestion[];
+    if (type === 'trivia') {
+      parsed = DEFAULT_QUIZ_QUESTIONS.filter(q => q.id.startsWith('r1-')).map(q => ({
+        text: q.text, options: q.options, correctAnswer: q.correctAnswer, category: q.category
+      }));
+    } else if (type === 'finale') {
+      parsed = DEFAULT_QUIZ_QUESTIONS.filter(q => q.id.startsWith('r5-')).map(q => ({
+        text: q.text, options: q.options, correctAnswer: q.correctAnswer, category: q.category
+      }));
+    } else {
+      parsed = DEFAULT_TASTE_ITEMS.map(q => ({
+        text: q.name, options: [], correctAnswer: q.name, category: q.category || 'General'
+      }));
+    }
+    setParsedQuestions(parsed);
+  };
+
+  const handleImport = () => {
+    if (parsedQuestions.length === 0) return;
+    onImport(questionsToQuizQuestion(parsedQuestions));
+    setParsedQuestions([]);
+    setBulkText('');
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-black text-lg uppercase tracking-tight">Import Questions</DialogTitle>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="csv" className="flex-1 text-[10px] font-black">CSV / File</TabsTrigger>
+            <TabsTrigger value="paste" className="flex-1 text-[10px] font-black">Bulk Paste</TabsTrigger>
+            <TabsTrigger value="defaults" className="flex-1 text-[10px] font-black">Defaults</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="csv" className="pt-4">
+            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.json"
+                onChange={handleFileChange}
+                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary file:text-primary-foreground file:font-black file:text-[10px] hover:file:bg-primary/90"
+              />
+              <p className="text-[10px] text-muted-foreground">Accepts .csv and .json files</p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="paste" className="pt-4 space-y-3">
+            <textarea
+              className="w-full h-28 p-3 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              placeholder="Paste questions here, one per line..."
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+            />
+            <div className="text-[10px] text-muted-foreground bg-slate-50 rounded-xl p-3 border border-slate-200">
+              <p className="font-black mb-1">Format: one question per line</p>
+              <code className="text-[9px]">What is 2+2? | 3 | 4 | 5 | 6 | 4 | Math</code>
+            </div>
+            <Button size="sm" onClick={handleBulkParse} className="font-black text-[10px]">
+              Parse Questions
+            </Button>
+          </TabsContent>
+
+          <TabsContent value="defaults" className="pt-4 space-y-3">
+            <Button variant="outline" className="w-full justify-between font-black text-[10px] h-auto py-3 px-4" onClick={() => handleLoadDefaults('trivia')}>
+              <span>Load 30 Trivia Questions</span>
+              <Badge variant="secondary" className="text-[9px]">r1-*</Badge>
+            </Button>
+            <Button variant="outline" className="w-full justify-between font-black text-[10px] h-auto py-3 px-4" onClick={() => handleLoadDefaults('finale')}>
+              <span>Load 25 Finale Questions</span>
+              <Badge variant="secondary" className="text-[9px]">r5-*</Badge>
+            </Button>
+            {roundType === 'taste' && (
+              <Button variant="outline" className="w-full justify-between font-black text-[10px] h-auto py-3 px-4" onClick={() => handleLoadDefaults('taste')}>
+                <span>Load 15 Taste Items</span>
+                <Badge variant="secondary" className="text-[9px]">taste</Badge>
+              </Button>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {error && (
+          <p className="text-[10px] text-red-500 font-medium bg-red-50 rounded-lg p-2">{error}</p>
+        )}
+
+        {parsedQuestions.length > 0 && (
+          <div className="space-y-3 border-t border-slate-200 pt-4 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Preview ({parsedQuestions.length} questions)
+              </span>
+              <Button size="sm" onClick={handleImport} className="font-black text-[10px]">
+                Import {parsedQuestions.length} Questions
+              </Button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {parsedQuestions.map((q, i) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
+                  <p className="text-[10px] font-medium truncate flex-1">{q.text}</p>
+                  <span className="text-[9px] text-muted-foreground ml-2 shrink-0 bg-white px-1.5 py-0.5 rounded">{q.category}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function QuizConfigPanel({ round }: { round: RoundDefinition }) {
   const updateRoundConfig = useGameStore(s => s.updateRoundConfig);
   const updateRoundTypeConfig = useGameStore(s => s.updateRoundTypeConfig);
@@ -129,13 +308,7 @@ function QuizConfigPanel({ round }: { round: RoundDefinition }) {
 
       <Separator />
 
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Question Bank</Label>
-          <span className="text-[10px] font-mono text-muted-foreground">{config.questions?.length || 0} questions</span>
-        </div>
-        <QuestionBankEditor round={round} />
-      </div>
+      <QuestionBankEditor round={round} />
     </div>
   );
 }
@@ -145,6 +318,7 @@ function QuestionBankEditor({ round }: { round: RoundDefinition }) {
   const questions: any[] = config.questions || [];
   const setRoundQuestions = useGameStore(s => s.setRoundQuestions);
   const [newQuestion, setNewQuestion] = useState({ text: '', options: ['', '', '', ''], correctAnswer: '', category: 'General' });
+  const [importOpen, setImportOpen] = useState(false);
 
   const addQuestion = () => {
     if (!newQuestion.text.trim()) return;
@@ -163,8 +337,27 @@ function QuestionBankEditor({ round }: { round: RoundDefinition }) {
     setRoundQuestions(round.id, questions.filter(q => q.id !== id));
   };
 
+  const handleImport = (imported: QuizQuestion[]) => {
+    setRoundQuestions(round.id, [...questions, ...imported]);
+  };
+
   return (
     <div className="space-y-3">
+      <div className="flex justify-between items-center">
+        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Question Bank</span>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[10px] font-black h-7"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload size={12} className="mr-1" /> IMPORT
+          </Button>
+          <span className="text-[10px] font-mono text-muted-foreground self-center">{questions.length} questions</span>
+        </div>
+      </div>
+
       <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
         <Input placeholder="Question text" value={newQuestion.text} onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })} className="border-slate-200" />
         <div className="grid grid-cols-2 gap-2">
@@ -202,6 +395,13 @@ function QuestionBankEditor({ round }: { round: RoundDefinition }) {
           <p className="text-xs text-muted-foreground italic py-4 text-center">No questions yet. Add your first question above.</p>
         )}
       </div>
+
+      <QuestionImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImport={handleImport}
+        roundType={round.type}
+      />
     </div>
   );
 }
@@ -324,13 +524,7 @@ function FinaleConfigPanel({ round }: { round: RoundDefinition }) {
 
       <Separator />
 
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Question Bank</Label>
-          <span className="text-[10px] font-mono text-muted-foreground">{config.questions?.length || 0} questions</span>
-        </div>
-        <QuestionBankEditor round={round} />
-      </div>
+      <QuestionBankEditor round={round} />
     </div>
   );
 }

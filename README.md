@@ -85,6 +85,23 @@ npm run test:watch # Watch mode
 npm run test:coverage # With coverage report
 ```
 
+### Self-Hosted Deployment (Docker)
+
+1. Set your Supabase credentials:
+   ```bash
+   export NEXT_PUBLIC_SUPABASE_URL=your_project_url
+   export NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   ```
+
+2. Build and start:
+   ```bash
+   docker compose up -d
+   ```
+
+3. Open http://localhost:3000
+
+The app is built as a static site — no server-side rendering, so it's lightweight and fast.
+
 ## 📖 Documentation
 
 - [**Host User Guide**](docs/public/HOST_GUIDE.md): Master the game controls and shortcuts.
