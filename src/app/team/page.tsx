@@ -1,16 +1,17 @@
-/**
- * TABLE WARS! - Page: team
- * 
- * Route handler for the team view.
- * 
- * Last Updated: May 13, 2026
- */
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { useGameStore } from '@/store/useGameStore';
+import { useRouter } from 'next/navigation';
 
-const TeamView = dynamic(() => import('@/components/views/TeamView').then(mod => ({ default: mod.TeamView })), { ssr: false });
+export default function TeamRedirect() {
+  const setView = useGameStore(s => s.setView);
+  const router = useRouter();
 
-export default function ForcedTeamPage() {
-  return <TeamView />;
+  useEffect(() => {
+    setView('team');
+    router.replace('/');
+  }, [setView, router]);
+
+  return null;
 }

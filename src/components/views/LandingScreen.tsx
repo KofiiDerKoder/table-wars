@@ -37,7 +37,7 @@ export function LandingScreen({ onStart }: { onStart: () => void }) {
         
         {/* Tagline */}
         <p className="text-3xl text-muted-foreground font-medium tracking-wide">
-          The ultimate tabletop event management system.
+          The live competition management platform.
         </p>
       </div>
       

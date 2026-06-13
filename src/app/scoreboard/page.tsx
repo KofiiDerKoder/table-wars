@@ -1,16 +1,17 @@
-/**
- * TABLE WARS! - Page: scoreboard
- * 
- * Route handler for the scoreboard view.
- * 
- * Last Updated: May 13, 2026
- */
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { useGameStore } from '@/store/useGameStore';
+import { useRouter } from 'next/navigation';
 
-const LiveScoreboard = dynamic(() => import('@/components/views/LiveScoreboard').then(mod => ({ default: mod.LiveScoreboard })), { ssr: false });
+export default function ScoreboardRedirect() {
+  const setView = useGameStore(s => s.setView);
+  const router = useRouter();
 
-export default function ForcedScoreboardPage() {
-  return <LiveScoreboard />;
+  useEffect(() => {
+    setView('scoreboard');
+    router.replace('/');
+  }, [setView, router]);
+
+  return null;
 }

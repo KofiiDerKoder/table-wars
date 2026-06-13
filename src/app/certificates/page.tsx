@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import { Button } from '@/components/ui/button';
 import { Printer, Download, ChevronLeft } from 'lucide-react';
@@ -26,7 +26,7 @@ export const Certificate = ({ id, title, name, description, color }: { id?: stri
       <h1 className="text-7xl font-black text-slate-950 mt-4 leading-tight">{name.toUpperCase()}</h1>
     </div>
     <div className="text-center">
-      <p className="text-2xl font-bold text-slate-700 italic">"{description}"</p>
+      <p className="text-2xl font-bold text-slate-700 italic">&quot;{description}&quot;</p>
       <div className="mt-8 flex justify-center gap-12 text-slate-400 font-bold uppercase tracking-widest text-xs">
         <span>BOARDING HOUSE 2026</span>
         <span>TABLE WARS</span>
@@ -43,17 +43,13 @@ export default function CertificatesPage() {
 
   // State and hook initialization
   const { teams, initialize } = useGameStore(); // Access game state and initialization function
-  const [mounted, setMounted] = useState(false); // Track if component is mounted
   const [isExporting, setIsExporting] = useState(false); // Track PDF export status
   const router = useRouter(); // Router for navigation
 
   // Effect to initialize component and game state
   useEffect(() => {
-    setMounted(true);
-    if (!mounted) {
-      initialize();
-    }
-  }, []);
+    initialize();
+  }, [initialize]);
 
   /**
    * Exports certificates as a PDF file
@@ -82,7 +78,7 @@ export default function CertificatesPage() {
   };
 
   // Return null until component is mounted
-  if (!mounted) return null;
+  if (typeof window === 'undefined') return null;
 
   // Sort teams by score in descending order
   const sortedTeams = [...teams].sort((a, b) => b.score - a.score);

@@ -1,16 +1,17 @@
-/**
- * TABLE WARS! - Page: host
- * 
- * Route handler for the host view.
- * 
- * Last Updated: May 13, 2026
- */
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { useGameStore } from '@/store/useGameStore';
+import { useRouter } from 'next/navigation';
 
-const HostPanel = dynamic(() => import('@/components/views/HostPanel').then(mod => ({ default: mod.HostPanel })), { ssr: false });
+export default function HostRedirect() {
+  const setView = useGameStore(s => s.setView);
+  const router = useRouter();
 
-export default function ForcedHostPage() {
-  return <HostPanel />;
+  useEffect(() => {
+    setView('host');
+    router.replace('/');
+  }, [setView, router]);
+
+  return null;
 }

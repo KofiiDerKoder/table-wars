@@ -1,19 +1,16 @@
-/**
- * TABLE WARS! - Core Game Store
- * 
- * This file is the primary engine of the application. It manages game state,
- * scoring, timers, and synchronization across multiple tabs and devices.
- * 
- * Last Updated: May 13, 2026
- */
-
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { broadcastUpdate, saveState, loadState, initSync, setBroadcastHandler, clearSync } from '@/services/syncService';
+import * as gameService from '@/services/gameService';
+import * as teamService from '@/services/teamService';
+import * as sessionService from '@/services/sessionService';
+import * as buzzService from '@/services/buzzService';
+import { subscribeToGameState, subscribeToGameStateLegacy, subscribeToTeamsLegacy } from '@/services/realtimeService';
+import { RoundDefinition, RoundData, createDefaultRounds, RoundType, createDefaultRoundConfig } from '@/types/rounds';
 
 // --- Types & Interfaces ---------------------------------------------------
 
 /** High-level application views */
-export type View = 'setup' | 'host' | 'scoreboard' | 'team' | 'results';
+export type View = 'setup' | 'host' | 'scoreboard' | 'team' | 'results' | 'join' | 'certificates';
 
 /** Display modes for the projector scoreboard */
 export type ProjectorMode = 'scoreboard' | 'black' | 'logo' | 'announcement' | 'intro';
@@ -85,7 +82,11 @@ interface GameState {
   /** Used for the Undo Score feature */
   lastScoreChange: { teamId: string; points: number; round: number } | null;
   
-  // --- Round-Specific Data ---
+  // --- Round System (Data-Driven) ---
+  rounds: RoundDefinition[];
+  roundsData: RoundData;
+
+  // --- Round-Specific Data (Backward Compat) ---
   quiz: {
     questions: QuizQuestion[];
     currentIndex: number;
@@ -116,6 +117,19 @@ interface GameState {
   setTeams: (teams: Team[]) => Promise<void>;
   setSuddenDeath: (active: boolean) => Promise<void>;
   setTiebreakerTeams: (teamIds: string[]) => void;
+  setRounds: (rounds: RoundDefinition[]) => Promise<void>;
+  getRoundData: <T>(roundId: string, key: string, defaultValue: T) => T;
+  setRoundData: (roundId: string, key: string, value: unknown) => Promise<void>;
+  addRound: (type: RoundType) => void;
+  removeRound: (roundId: string) => void;
+  reorderRounds: (fromIndex: number, toIndex: number) => void;
+  updateRoundName: (roundId: string, name: string) => void;
+  updateRoundDescription: (roundId: string, description: string) => void;
+  updateRoundConfig: (roundId: string, config: Partial<RoundDefinition['config']>) => void;
+  updateRoundTypeConfig: (roundId: string, roundConfig: RoundDefinition['roundConfig']) => void;
+  setRoundQuestions: (roundId: string, questions: QuizQuestion[]) => void;
+  setRoundTasteItems: (roundId: string, items: TasteItem[]) => void;
+  setRoundPlacementValues: (roundId: string, pointValues: number[]) => void;
   initialize: () => Promise<void>;
   setView: (view: View) => Promise<void>;
   updateTeamScore: (teamId: string, points: number, round: number) => Promise<void>;
@@ -147,97 +161,21 @@ interface GameState {
   createSession: () => Promise<SessionInfo | null>;
   joinSession: (code: string, teamId?: string) => Promise<SessionInfo | null>;
   leaveSession: () => void;
+  setJoinedTeam: (teamId: string | undefined) => void;
+  detectTies: () => Team[];
   saveToLocalStorage: () => void;
   loadFromLocalStorage: () => boolean;
-}
-
-// ─── Synchronization Engine ───────────────────────────────────────────────
-
-/**
- * BroadcastChannel ensures that if a user has multiple tabs open on the same
- * machine (e.g., Host Panel and Scoreboard), they stay in sync instantly.
- */
-let broadcastChannel: BroadcastChannel | null = null;
-
-function initBroadcastChannel(set: (fn: (state: GameState) => Partial<GameState>) => void) {
-  if (typeof window === 'undefined') return;
-  try {
-    broadcastChannel = new BroadcastChannel('tablewars-sync');
-    broadcastChannel.onmessage = (event) => {
-      const { type, payload } = event.data;
-      if (type === 'STATE_UPDATE') {
-        set(() => payload);
-      }
-    };
-  } catch {
-    // BroadcastChannel not supported in this browser
-  }
-}
-
-function broadcastUpdate(partial: Record<string, unknown>) {
-  if (broadcastChannel) {
-    try {
-      broadcastChannel.postMessage({ type: 'STATE_UPDATE', payload: partial });
-    } catch {
-      // Ignore broadcast errors
-    }
-  }
-}
-
-// ─── Persistence Logic ────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'tablewars-state';
-
-/**
- * Persists critical game state to localStorage to survive page refreshes.
- * State is timestamped and considered stale after 24 hours.
- */
-function saveStateToLocalStorage(state: Partial<GameState>) {
-  if (typeof window === 'undefined') return;
-  try {
-    const serializable = {
-      teams: state.teams,
-      currentRound: state.currentRound,
-      isSuddenDeath: state.isSuddenDeath,
-      timer: state.timer,
-      quiz: state.quiz,
-      tasteTest: state.tasteTest,
-      duel: state.duel,
-      projectorMode: state.projectorMode,
-      announcementText: state.announcementText,
-      session: state.session,
-      timestamp: Date.now(),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-  } catch {
-    // localStorage unavailable
-  }
-}
-
-function loadStateFromLocalStorage(): Partial<GameState> | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (Date.now() - (data.timestamp || 0) > 24 * 60 * 60 * 1000) {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
 }
 
 // ─── The Game Store ───────────────────────────────────────────────────────
 
 export const useGameStore = create<GameState>((set, get) => {
   if (typeof window !== 'undefined') {
-    initBroadcastChannel(set);
+    initSync();
+    setBroadcastHandler((data) => set(() => data));
   }
 
-  const savedState = loadStateFromLocalStorage();
+  const savedState = loadState();
   const initialState: Partial<GameState> = savedState || {};
 
   return {
@@ -253,6 +191,8 @@ export const useGameStore = create<GameState>((set, get) => {
     isSuddenDeath: initialState.isSuddenDeath || false,
     lastScoreChange: null,
     timer: initialState.timer || { duration: 0, remaining: 0, isActive: false },
+    rounds: initialState.rounds?.length ? initialState.rounds : createDefaultRounds(),
+    roundsData: initialState.roundsData || {},
     quiz: initialState.quiz || { questions: [], currentIndex: 0, isRevealed: false, buzzedTeamId: null },
     tasteTest: initialState.tasteTest || { items: [], currentIndex: 0, isRevealed: false, itemsCustomized: false },
     duel: initialState.duel || { challengerId: null, challengedId: null, winnerId: null, isActive: false },
@@ -264,13 +204,9 @@ export const useGameStore = create<GameState>((set, get) => {
     setCompetitionName: async (name: string) => {
       set({ competitionName: name });
       broadcastUpdate({ competitionName: name });
-      saveStateToLocalStorage({ competitionName: name });
+      saveState({ competitionName: name });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ competition_name: name }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ competition_name: name }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'competition_name', name);
     },
 
     detectTies: () => {
@@ -280,7 +216,7 @@ export const useGameStore = create<GameState>((set, get) => {
       const maxScore = sorted[0].score;
       const winners = teams.filter(t => t.score === maxScore);
       if (winners.length > 1) {
-        return winners.map(t => t.id);
+        return winners;
       }
       return [];
     },
@@ -289,69 +225,159 @@ export const useGameStore = create<GameState>((set, get) => {
       set({ tiebreakerTeams: teamIds });
     },
 
+    setRounds: async (rounds: RoundDefinition[]) => {
+      set({ rounds });
+      broadcastUpdate({ rounds });
+      saveState({ rounds });
+    },
+
+    getRoundData: <T>(roundId: string, key: string, defaultValue: T): T => {
+      const { roundsData } = get();
+      const round = roundsData[roundId];
+      if (round && key in round) return round[key] as T;
+      return defaultValue;
+    },
+
+    setRoundData: async (roundId: string, key: string, value: unknown) => {
+      const { roundsData } = get();
+      const newRoundsData = {
+        ...roundsData,
+        [roundId]: {
+          ...(roundsData[roundId] || {}),
+          [key]: value,
+        },
+      };
+      set({ roundsData: newRoundsData });
+      broadcastUpdate({ roundsData: newRoundsData });
+      saveState({ roundsData: newRoundsData });
+    },
+
+    addRound: (type: RoundType) => {
+      const { rounds } = get();
+      const newRound: RoundDefinition = {
+        id: crypto.randomUUID(),
+        name: `New ${type.charAt(0).toUpperCase() + type.slice(1)} Round`,
+        type,
+        order: rounds.length + 1,
+        config: { timerEnabled: false },
+        roundConfig: createDefaultRoundConfig(type),
+      };
+      const newRounds = [...rounds, newRound];
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    removeRound: (roundId: string) => {
+      const { rounds } = get();
+      const newRounds = rounds.filter(r => r.id !== roundId).map((r, i) => ({ ...r, order: i + 1 }));
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    reorderRounds: (fromIndex: number, toIndex: number) => {
+      const { rounds } = get();
+      const newRounds = [...rounds];
+      const [moved] = newRounds.splice(fromIndex, 1);
+      newRounds.splice(toIndex, 0, moved);
+      const reordered = newRounds.map((r, i) => ({ ...r, order: i + 1 }));
+      set({ rounds: reordered });
+      broadcastUpdate({ rounds: reordered });
+      saveState({ rounds: reordered });
+    },
+
+    updateRoundName: (roundId: string, name: string) => {
+      const { rounds } = get();
+      const newRounds = rounds.map(r => r.id === roundId ? { ...r, name } : r);
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    updateRoundDescription: (roundId: string, description: string) => {
+      const { rounds } = get();
+      const newRounds = rounds.map(r => r.id === roundId ? { ...r, description } : r);
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    updateRoundConfig: (roundId: string, config: Partial<RoundDefinition['config']>) => {
+      const { rounds } = get();
+      const newRounds = rounds.map(r => r.id === roundId ? { ...r, config: { ...r.config, ...config } } : r);
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    updateRoundTypeConfig: (roundId: string, roundConfig: RoundDefinition['roundConfig']) => {
+      const { rounds } = get();
+      const newRounds = rounds.map(r => r.id === roundId ? { ...r, roundConfig } : r);
+      set({ rounds: newRounds });
+      broadcastUpdate({ rounds: newRounds });
+      saveState({ rounds: newRounds });
+    },
+
+    setRoundQuestions: (roundId: string, questions: QuizQuestion[]) => {
+      const { rounds } = get();
+      const round = rounds.find(r => r.id === roundId);
+      if (!round) return;
+      const roundConfig = round.roundConfig as any;
+      get().updateRoundTypeConfig(roundId, { ...roundConfig, questions, categories: [...new Set(questions.map(q => q.category))] });
+    },
+
+    setRoundTasteItems: (roundId: string, items: TasteItem[]) => {
+      const { rounds } = get();
+      const round = rounds.find(r => r.id === roundId);
+      if (!round) return;
+      const roundConfig = (round.roundConfig as any) || {};
+      get().updateRoundTypeConfig(roundId, { ...roundConfig, items });
+    },
+
+    setRoundPlacementValues: (roundId: string, pointValues: number[]) => {
+      const { rounds } = get();
+      const round = rounds.find(r => r.id === roundId);
+      if (!round) return;
+      const roundConfig = (round.roundConfig as any) || {};
+      get().updateRoundTypeConfig(roundId, { ...roundConfig, pointValues });
+    },
+
     /**
      * Bootstraps the application state by pulling from Supabase.
      * Supports both legacy single-game and modern session-based modes.
      */
     initialize: async () => {
       const { session } = get();
-      if (session) {
-        const { data: state } = await supabase.from('game_state').select('*').eq('session_id', session.id).single();
-        const { data: teams } = await supabase.from('teams').select('*').eq('session_id', session.id);
-        if (state) set({ 
-          currentView: state.current_view, 
-          projectorMode: state.projector_mode,
-          currentRound: state.current_round,
-          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active },
-          quiz: { 
-            questions: (state.quiz_questions as QuizQuestion[]) || [],
-            currentIndex: state.quiz_index,
-            isRevealed: state.quiz_revealed,
-            buzzedTeamId: state.buzzed_team_id
-          },
-          tasteTest: {
-            items: (state.taste_items as TasteItem[]) || [],
-            currentIndex: state.taste_index,
-            isRevealed: false,
-            itemsCustomized: false
-          }
-        });
-        if (teams) set({ teams: teams as Team[] });
-      } else {
-        const { data: state } = await supabase.from('game_state').select('*').eq('id', 1).single();
-        const { data: teams } = await supabase.from('teams').select('*');
-        if (state) set({ 
-          currentView: state.current_view, 
-          projectorMode: state.projector_mode,
-          currentRound: state.current_round,
-          timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active },
-          quiz: { 
-            questions: (state.quiz_questions as QuizQuestion[]) || [],
-            currentIndex: state.quiz_index,
-            isRevealed: state.quiz_revealed,
-            buzzedTeamId: state.buzzed_team_id
-          },
-          tasteTest: {
-            items: (state.taste_items as TasteItem[]) || [],
-            currentIndex: state.taste_index,
-            isRevealed: false,
-            itemsCustomized: false
-          }
-        });
-        if (teams) set({ teams: teams as Team[] });
-      }
+      const { data: state } = await gameService.fetchGameState(session?.id);
+      const { data: teams } = await teamService.fetchTeams(session?.id);
+      if (state) set({ 
+        currentView: state.current_view, 
+        projectorMode: state.projector_mode,
+        currentRound: state.current_round,
+        timer: { duration: 0, remaining: state.timer_remaining, isActive: state.timer_is_active },
+        quiz: { 
+          questions: (state.quiz_questions as QuizQuestion[]) || [],
+          currentIndex: state.quiz_index,
+          isRevealed: state.quiz_revealed,
+          buzzedTeamId: state.buzzed_team_id
+        },
+        tasteTest: {
+          items: (state.taste_items as TasteItem[]) || [],
+          currentIndex: state.taste_index,
+          isRevealed: false,
+          itemsCustomized: false
+        }
+      });
+      if (teams) set({ teams: teams as Team[] });
     },
 
     setView: async (view: View) => {
       set({ currentView: view });
       broadcastUpdate({ currentView: view });
-      saveStateToLocalStorage({ currentView: view });
+      saveState({ currentView: view });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ current_view: view }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ current_view: view }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'current_view', view);
     },
 
     updateTeamScore: async (teamId, points, round) => {
@@ -364,122 +390,83 @@ export const useGameStore = create<GameState>((set, get) => {
         teams: state.teams.map(t => t.id === teamId ? { ...t, score: newScore, roundScores: newRoundScores } : t)
       }));
       broadcastUpdate({ teams: get().teams });
-      saveStateToLocalStorage({ teams: get().teams, lastScoreChange: { teamId, points, round } });
+      saveState({ teams: get().teams, lastScoreChange: { teamId, points, round } });
       
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update({ score: newScore, round_scores: newRoundScores }).eq('id', teamId);
-      } else {
-        await supabase.from('teams').update({ score: newScore, round_scores: newRoundScores }).eq('id', teamId);
-      }
+      await teamService.updateTeamScore(session?.id, teamId, newScore, newRoundScores);
     },
     
     setCurrentRound: async (round) => {
-      set({ currentRound: round });
-      broadcastUpdate({ currentRound: round });
-      saveStateToLocalStorage({ currentRound: round });
+      const { rounds } = get();
+      const clamped = Math.max(1, Math.min(round, rounds.length));
+      set({ currentRound: clamped });
+      broadcastUpdate({ currentRound: clamped });
+      saveState({ currentRound: clamped });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ current_round: round }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ current_round: round }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'current_round', clamped);
     },
 
     setAnnouncement: async (text) => {
       set({ announcementText: text });
       broadcastUpdate({ announcementText: text });
-      saveStateToLocalStorage({ announcementText: text });
+      saveState({ announcementText: text });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ announcement_text: text }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ announcement_text: text }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'announcement_text', text);
     },
 
     setGameStatus: async (status) => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ game_status: status }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ game_status: status }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'game_status', status);
     },
 
     setIntroTeam: async (id) => {
       set({ introTeamId: id });
       broadcastUpdate({ introTeamId: id });
-      saveStateToLocalStorage({ introTeamId: id });
+      saveState({ introTeamId: id });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ intro_team_id: id }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ intro_team_id: id }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'intro_team_id', id);
     },
 
     setTeams: async (teams) => {
       set({ teams });
       broadcastUpdate({ teams });
-      saveStateToLocalStorage({ teams });
+      saveState({ teams });
       const { session } = get();
-      if (session) {
-        const teamsWithSession = teams.map(t => ({ ...t, session_id: session.id }));
-        await supabase.from('teams').upsert(teamsWithSession);
-      } else {
-        await supabase.from('teams').upsert(teams);
-      }
+      await teamService.upsertTeams(session?.id, teams);
     },
 
     setSuddenDeath: async (active) => {
       set({ isSuddenDeath: active });
       broadcastUpdate({ isSuddenDeath: active });
-      saveStateToLocalStorage({ isSuddenDeath: active });
+      saveState({ isSuddenDeath: active });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ is_suddenDeath: active }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ is_suddenDeath: active }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'is_suddenDeath', active);
     },
     
     startTimer: async (seconds: number) => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ timer_remaining: seconds, timer_is_active: true, timer_duration: seconds }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ timer_remaining: seconds, timer_is_active: true, timer_duration: seconds }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { timer_remaining: seconds, timer_is_active: true, timer_duration: seconds });
       const timerState = { duration: seconds, remaining: seconds, isActive: true };
       set((state) => ({ timer: timerState }));
       broadcastUpdate({ timer: timerState });
-      saveStateToLocalStorage({ timer: timerState });
+      saveState({ timer: timerState });
     },
 
     stopTimer: async () => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ timer_is_active: false }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ timer_is_active: false }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'timer_is_active', false);
       set((state) => ({ timer: { ...state.timer, isActive: false } }));
       broadcastUpdate({ timer: { ...get().timer, isActive: false } });
-      saveStateToLocalStorage({ timer: { ...get().timer, isActive: false } });
+      saveState({ timer: { ...get().timer, isActive: false } });
     },
 
     resetTimer: async () => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ timer_remaining: 0, timer_is_active: false }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ timer_remaining: 0, timer_is_active: false }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { timer_remaining: 0, timer_is_active: false });
       const timerState = { duration: 0, remaining: 0, isActive: false };
       set({ timer: timerState });
       broadcastUpdate({ timer: timerState });
-      saveStateToLocalStorage({ timer: timerState });
+      saveState({ timer: timerState });
     },
 
     tickTimer: async () => {
@@ -487,15 +474,11 @@ export const useGameStore = create<GameState>((set, get) => {
       if (timer.remaining > 0) {
         const newRemaining = timer.remaining - 1;
         const { session } = get();
-        if (session) {
-          await supabase.from('game_state').update({ timer_remaining: newRemaining }).eq('session_id', session.id);
-        } else {
-          await supabase.from('game_state').update({ timer_remaining: newRemaining }).eq('id', 1);
-        }
+        await gameService.updateGameStateField(session?.id, 'timer_remaining', newRemaining);
         const newTimer = { ...timer, remaining: newRemaining };
         set({ timer: newTimer });
         broadcastUpdate({ timer: newTimer });
-        saveStateToLocalStorage({ timer: newTimer });
+        saveState({ timer: newTimer });
       }
     },
 
@@ -504,13 +487,9 @@ export const useGameStore = create<GameState>((set, get) => {
       const newQuiz = { ...quiz, isRevealed: !quiz.isRevealed };
       set({ quiz: newQuiz });
       broadcastUpdate({ quiz: newQuiz });
-      saveStateToLocalStorage({ quiz: newQuiz });
+      saveState({ quiz: newQuiz });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ quiz_revealed: newQuiz.isRevealed }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ quiz_revealed: newQuiz.isRevealed }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'quiz_revealed', newQuiz.isRevealed);
     },
 
     nextQuestion: async () => {
@@ -519,13 +498,9 @@ export const useGameStore = create<GameState>((set, get) => {
       const newQuiz = { ...quiz, currentIndex: newIdx, isRevealed: false };
       set({ quiz: newQuiz });
       broadcastUpdate({ quiz: newQuiz });
-      saveStateToLocalStorage({ quiz: newQuiz });
+      saveState({ quiz: newQuiz });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { quiz_index: newIdx, quiz_revealed: false });
     },
 
     prevQuestion: async () => {
@@ -534,25 +509,17 @@ export const useGameStore = create<GameState>((set, get) => {
       const newQuiz = { ...quiz, currentIndex: newIdx, isRevealed: false };
       set({ quiz: newQuiz });
       broadcastUpdate({ quiz: newQuiz });
-      saveStateToLocalStorage({ quiz: newQuiz });
+      saveState({ quiz: newQuiz });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ quiz_index: newIdx, quiz_revealed: false }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { quiz_index: newIdx, quiz_revealed: false });
     },
 
     setProjectorMode: async (projectorMode: ProjectorMode) => {
       set({ projectorMode });
       broadcastUpdate({ projectorMode });
-      saveStateToLocalStorage({ projectorMode });
+      saveState({ projectorMode });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ projector_mode: projectorMode }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ projector_mode: projectorMode }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'projector_mode', projectorMode);
     },
 
     nextTasteItem: async () => {
@@ -561,13 +528,9 @@ export const useGameStore = create<GameState>((set, get) => {
       const newTaste = { ...tasteTest, currentIndex: newIdx };
       set({ tasteTest: newTaste });
       broadcastUpdate({ tasteTest: newTaste });
-      saveStateToLocalStorage({ tasteTest: newTaste });
+      saveState({ tasteTest: newTaste });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_index: newIdx }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_index: newIdx }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_index', newIdx);
     },
 
     prevTasteItem: async () => {
@@ -576,37 +539,25 @@ export const useGameStore = create<GameState>((set, get) => {
       const newTaste = { ...tasteTest, currentIndex: newIdx };
       set({ tasteTest: newTaste });
       broadcastUpdate({ tasteTest: newTaste });
-      saveStateToLocalStorage({ tasteTest: newTaste });
+      saveState({ tasteTest: newTaste });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_index: newIdx }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_index: newIdx }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_index', newIdx);
     },
 
     startDuel: async (challengerId: string, challengedId: string) => {
       set((state) => ({ duel: { ...state.duel, challengerId, challengedId, isActive: true } }));
       broadcastUpdate({ duel: get().duel });
-      saveStateToLocalStorage({ duel: get().duel });
+      saveState({ duel: get().duel });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ duel_challenger: challengerId, duel_challenged: challengedId, duel_active: true }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ duel_challenger: challengerId, duel_challenged: challengedId, duel_active: true }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { duel_challenger: challengerId, duel_challenged: challengedId, duel_active: true });
     },
 
     endDuel: async (winnerId: string | null) => {
       set((state) => ({ duel: { ...state.duel, winnerId, isActive: false } }));
       broadcastUpdate({ duel: get().duel });
-      saveStateToLocalStorage({ duel: get().duel });
+      saveState({ duel: get().duel });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ duel_winner: winnerId, duel_active: false }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ duel_winner: winnerId, duel_active: false }).eq('id', 1);
-      }
+      await gameService.updateGameState(session?.id, { duel_winner: winnerId, duel_active: false });
     },
 
     setTasteScore: async (teamId, itemId, points) => {
@@ -621,94 +572,66 @@ export const useGameStore = create<GameState>((set, get) => {
       const newTasteItemScores = { ...team.tasteItemScores, [itemId]: points };
 
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update({ 
-          score: newScore, 
-          round_scores: newRoundScores,
-          taste_item_scores: newTasteItemScores
-        }).eq('id', teamId);
-      } else {
-        await supabase.from('teams').update({ 
-          score: newScore, 
-          round_scores: newRoundScores,
-          taste_item_scores: newTasteItemScores
-        }).eq('id', teamId);
-      }
+      await teamService.updateTeam(session?.id, teamId, { 
+        score: newScore, 
+        round_scores: newRoundScores,
+        taste_item_scores: newTasteItemScores
+      });
       
       set((state) => ({
         teams: state.teams.map(t => t.id === teamId ? { ...t, score: newScore, roundScores: newRoundScores, tasteItemScores: newTasteItemScores } : t)
       }));
       broadcastUpdate({ teams: get().teams });
-      saveStateToLocalStorage({ teams: get().teams });
+      saveState({ teams: get().teams });
     },
 
     setTasteItems: async (items) => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_items: items }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_items: items }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_items', items);
       set((state) => ({ tasteTest: { ...state.tasteTest, items } }));
       broadcastUpdate({ tasteTest: get().tasteTest });
-      saveStateToLocalStorage({ tasteTest: get().tasteTest });
+      saveState({ tasteTest: get().tasteTest });
     },
 
     addTasteItem: async (item) => {
       const newItems = [...get().tasteTest.items, item];
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_items', newItems);
       set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
       broadcastUpdate({ tasteTest: get().tasteTest });
-      saveStateToLocalStorage({ tasteTest: get().tasteTest });
+      saveState({ tasteTest: get().tasteTest });
     },
 
     updateTasteItem: async (item) => {
       const newItems = get().tasteTest.items.map(i => i.id === item.id ? item : i);
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_items', newItems);
       set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
       broadcastUpdate({ tasteTest: get().tasteTest });
-      saveStateToLocalStorage({ tasteTest: get().tasteTest });
+      saveState({ tasteTest: get().tasteTest });
     },
 
     removeTasteItem: async (id) => {
       const newItems = get().tasteTest.items.filter(i => i.id !== id);
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ taste_items: newItems }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'taste_items', newItems);
       set((state) => ({ tasteTest: { ...state.tasteTest, items: newItems } }));
       broadcastUpdate({ tasteTest: get().tasteTest });
-      saveStateToLocalStorage({ tasteTest: get().tasteTest });
+      saveState({ tasteTest: get().tasteTest });
     },
 
     toggleTimer: () => {
       set((state) => ({ timer: { ...state.timer, isActive: !state.timer.isActive } }));
       broadcastUpdate({ timer: get().timer });
-      saveStateToLocalStorage({ timer: get().timer });
+      saveState({ timer: get().timer });
     },
 
     setQuizQuestions: async (questions) => {
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ quiz_questions: questions }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ quiz_questions: questions }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'quiz_questions', questions);
       set((state) => ({ quiz: { ...state.quiz, questions } }));
       broadcastUpdate({ quiz: get().quiz });
-      saveStateToLocalStorage({ quiz: get().quiz });
+      saveState({ quiz: get().quiz });
     },
 
     buzzIn: async (teamId: string) => {
@@ -716,20 +639,14 @@ export const useGameStore = create<GameState>((set, get) => {
       const newQuiz = { ...quiz, buzzedTeamId: teamId };
       set({ quiz: newQuiz });
       broadcastUpdate({ quiz: newQuiz });
-      saveStateToLocalStorage({ quiz: newQuiz });
+      saveState({ quiz: newQuiz });
 
-      if (session) {
-        const { data } = await supabase.rpc('lock_buzz_for_question', {
-          p_session_id: session.id,
-          p_team_id: teamId,
-          p_question_index: quiz.currentIndex
-        });
-        
-        if (data) {
-          await supabase.from('game_state').update({ buzzed_team_id: teamId }).eq('session_id', session.id);
-        }
-      } else {
-        await supabase.from('game_state').update({ buzzed_team_id: teamId }).eq('id', 1);
+      const { data } = await buzzService.lockBuzz(session?.id, teamId, quiz.currentIndex);
+      
+      if (data) {
+        await gameService.updateGameStateField(session?.id, 'buzzed_team_id', teamId);
+      } else if (!session) {
+        await gameService.updateGameStateField(undefined, 'buzzed_team_id', teamId);
       }
     },
 
@@ -738,55 +655,39 @@ export const useGameStore = create<GameState>((set, get) => {
       const newQuiz = { ...quiz, buzzedTeamId: null };
       set({ quiz: newQuiz });
       broadcastUpdate({ quiz: newQuiz });
-      saveStateToLocalStorage({ quiz: newQuiz });
+      saveState({ quiz: newQuiz });
       const { session } = get();
-      if (session) {
-        await supabase.from('game_state').update({ buzzed_team_id: null }).eq('session_id', session.id);
-      } else {
-        await supabase.from('game_state').update({ buzzed_team_id: null }).eq('id', 1);
-      }
+      await gameService.updateGameStateField(session?.id, 'buzzed_team_id', null);
     },
 
     resetAll: async () => {
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update({ score: 0, round_scores: {} }).eq('session_id', session.id);
-        await supabase.from('game_state').update({ 
-          current_view: 'setup',
-          current_round: 1,
-          buzzed_team_id: null
-        }).eq('session_id', session.id);
-      } else {
-        await supabase.from('teams').update({ score: 0, round_scores: {} }).neq('id', 'non-existent');
-        await supabase.from('game_state').update({ 
-          current_view: 'setup',
-          current_round: 1,
-          buzzed_team_id: null
-        }).eq('id', 1);
-      }
+      await teamService.resetTeamScores(session?.id);
+      await gameService.updateGameState(session?.id, { 
+        current_view: 'setup',
+        current_round: 1,
+        buzzed_team_id: null
+      });
       set({
         currentView: 'setup',
         currentRound: 1,
         lastScoreChange: null,
-        teams: get().teams.map(t => ({ ...t, score: 0, roundScores: {} }))
+        teams: get().teams.map(t => ({ ...t, score: 0, roundScores: {} })),
+        roundsData: {}
       });
       broadcastUpdate({ currentView: 'setup', currentRound: 1 });
-      saveStateToLocalStorage({ currentView: 'setup', currentRound: 1 });
+      saveState({ currentView: 'setup', currentRound: 1 });
     },
 
     resetScores: async () => {
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update({ score: 0, round_scores: {} }).eq('session_id', session.id);
-      } else {
-        await supabase.from('teams').update({ score: 0, round_scores: {} }).neq('id', 'non-existent');
-      }
+      await teamService.resetTeamScores(session?.id);
       set({
         lastScoreChange: null,
         teams: get().teams.map(t => ({ ...t, score: 0, roundScores: {} }))
       });
       broadcastUpdate({ teams: get().teams });
-      saveStateToLocalStorage({ teams: get().teams });
+      saveState({ teams: get().teams });
     },
 
     undoLastScore: async () => {
@@ -798,195 +699,55 @@ export const useGameStore = create<GameState>((set, get) => {
       const newRoundScores = { ...team.roundScores, [lastScoreChange.round]: (team.roundScores[lastScoreChange.round] || 0) - lastScoreChange.points };
       
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update({ score: newScore, round_scores: newRoundScores }).eq('id', lastScoreChange.teamId);
-      } else {
-        await supabase.from('teams').update({ score: newScore, round_scores: newRoundScores }).eq('id', lastScoreChange.teamId);
-      }
+      await teamService.updateTeam(session?.id, lastScoreChange.teamId, { score: newScore, round_scores: newRoundScores });
       set({
         lastScoreChange: null,
         teams: teams.map(t => t.id === lastScoreChange.teamId ? { ...t, score: newScore, roundScores: newRoundScores } : t)
       });
       broadcastUpdate({ teams: get().teams });
-      saveStateToLocalStorage({ teams: get().teams, lastScoreChange: null });
+      saveState({ teams: get().teams, lastScoreChange: null });
     },
 
     updateTeam: async (teamId, updates) => {
       const { session } = get();
-      if (session) {
-        await supabase.from('teams').update(updates).eq('id', teamId);
-      } else {
-        await supabase.from('teams').update(updates).eq('id', teamId);
-      }
+      await teamService.updateTeam(session?.id, teamId, updates as Record<string, unknown>);
       set((state) => ({
         teams: state.teams.map(t => t.id === teamId ? { ...t, ...updates } : t)
       }));
       broadcastUpdate({ teams: get().teams });
-      saveStateToLocalStorage({ teams: get().teams });
+      saveState({ teams: get().teams });
     },
 
     // --- Multi-Device Session Management ---
     
     createSession: async () => {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let code = '';
-      for (let i = 0; i < 6; i++) {
-        code += chars[Math.floor(Math.random() * chars.length)];
+      const { teams, currentRound, projectorMode, announcementText, quiz, tasteTest, rounds } = get();
+      const sessionInfo = await sessionService.createSession(teams, currentRound, projectorMode, announcementText, quiz, tasteTest);
+      if (sessionInfo) {
+        set({ session: sessionInfo });
+        saveState({ session: sessionInfo });
+        return sessionInfo;
       }
-
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert([{ code, is_active: true }])
-        .select()
-        .single();
-
-      if (error || !data) {
-        console.error('Failed to create session:', error);
-        return null;
-      }
-
-      const { teams, currentRound, projectorMode, announcementText, quiz, tasteTest } = get();
-      const { error: gsError } = await supabase
-        .from('game_state')
-        .insert([{ 
-          session_id: data.id,
-          current_view: 'setup',
-          current_round: currentRound,
-          projector_mode: projectorMode,
-          announcement_text: announcementText,
-          quiz_index: quiz.currentIndex,
-          quiz_questions: quiz.questions,
-          taste_items: tasteTest.items,
-          taste_index: tasteTest.currentIndex
-        }]);
-
-      if (gsError) {
-        console.error('Failed to create game state:', gsError);
-        return null;
-      }
-
-      if (teams.length > 0) {
-        const teamsToInsert = teams.map(t => ({
-          ...t,
-          id: t.id,
-          session_id: data.id,
-          round_scores: t.roundScores,
-          taste_item_scores: t.tasteItemScores
-        }));
-        const cleanedTeams = teamsToInsert.map(({ roundScores, tasteItemScores, rankTrend, memberCount, ...rest }) => ({
-          ...rest,
-          round_scores: roundScores,
-          taste_item_scores: tasteItemScores,
-          rank_trend: rankTrend,
-          member_count: memberCount
-        }));
-
-        await supabase.from('teams').insert(cleanedTeams);
-      }
-
-      const sessionInfo: SessionInfo = {
-        id: data.id,
-        code: data.code,
-        isHost: true,
-      };
-
-      set({ session: sessionInfo });
-      saveStateToLocalStorage({ session: sessionInfo });
-      return sessionInfo;
+      return null;
     },
 
     joinSession: async (code: string, teamId?: string) => {
-      const { data: session, error } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .eq('is_active', true)
-        .single();
-
-      if (error || !session) {
-        console.error('Failed to join session:', error);
-        return null;
-      }
+      const result = await sessionService.joinSessionByCode(code);
+      if (!result) return null;
+      const { session } = result;
 
       const sessionInfo: SessionInfo = {
-        id: session.id,
-        code: session.code,
+        id: session.id as string,
+        code: session.code as string,
         isHost: false,
         joinedTeamId: teamId,
       };
 
       set({ session: sessionInfo });
-      saveStateToLocalStorage({ session: sessionInfo });
+      saveState({ session: sessionInfo });
 
-      const channel = supabase.channel(`session:${session.id}`);
-      channel
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `session_id=eq.${session.id}` }, (payload) => {
-          const n = payload.new as Record<string, unknown>;
-          useGameStore.setState({
-            currentView: n.current_view as View ?? undefined,
-            projectorMode: n.projector_mode as ProjectorMode ?? undefined,
-            currentRound: (n.current_round as number) ?? undefined,
-            announcementText: n.announcement_text as string ?? '',
-            isSuddenDeath: (n.is_suddenDeath as boolean) ?? false,
-            introTeamId: n.intro_team_id as string | null ?? null,
-            timer: {
-              duration: (n.timer_duration as number) ?? 0,
-              remaining: (n.timer_remaining as number) ?? 0,
-              isActive: (n.timer_is_active as boolean) ?? false,
-            },
-            quiz: {
-              questions: (n.quiz_questions as []) ?? [],
-              currentIndex: (n.quiz_index as number) ?? 0,
-              isRevealed: (n.quiz_revealed as boolean) ?? false,
-              buzzedTeamId: n.buzzed_team_id as string | null ?? null,
-            },
-            tasteTest: {
-              items: (n.taste_items as []) ?? [],
-              currentIndex: (n.taste_index as number) ?? 0,
-              isRevealed: false,
-              itemsCustomized: false,
-            },
-          });
-        })
-        .subscribe();
-
-      return sessionInfo;
-    },
-
-    leaveSession: () => {
-      set({ session: null });
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    },
-
-    saveToLocalStorage: () => {
-      saveStateToLocalStorage(get());
-    },
-
-    loadFromLocalStorage: () => {
-      const saved = loadStateFromLocalStorage();
-      if (saved) {
-        set(saved as Partial<GameState>);
-        return true;
-      }
-      return false;
-    },
-  };
-});
-
-// ─── Supabase Realtime Subscriptions (Legacy / Single Game) ────────────────
-
-let channel: ReturnType<typeof supabase.channel> | null = null;
-
-if (typeof window !== 'undefined') {
-  channel = supabase.channel('game_updates');
-
-  channel
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state' }, (payload: { new: Record<string, unknown> }) => {
-      const n = payload.new as Record<string, unknown>;
-      if (!n.session_id) {
-        useGameStore.setState({ 
+      subscribeToGameState(session.id as string, (n) => {
+        useGameStore.setState({
           currentView: n.current_view as View ?? undefined,
           projectorMode: n.projector_mode as ProjectorMode ?? undefined,
           currentRound: (n.current_round as number) ?? undefined,
@@ -998,6 +759,8 @@ if (typeof window !== 'undefined') {
             remaining: (n.timer_remaining as number) ?? 0,
             isActive: (n.timer_is_active as boolean) ?? false,
           },
+          rounds: (n.rounds as RoundDefinition[]) ?? undefined,
+          roundsData: (n.rounds_data as RoundData) ?? undefined,
           quiz: {
             questions: (n.quiz_questions as []) ?? [],
             currentIndex: (n.quiz_index as number) ?? 0,
@@ -1010,20 +773,84 @@ if (typeof window !== 'undefined') {
             isRevealed: false,
             itemsCustomized: false,
           },
-          duel: {
-            challengerId: n.duel_challenger as string | null ?? null,
-            challengedId: n.duel_challenged as string | null ?? null,
-            winnerId: n.duel_winner as string | null ?? null,
-            isActive: (n.duel_active as boolean) ?? false,
-          },
         });
+      });
+
+      return sessionInfo;
+    },
+
+    leaveSession: () => {
+      set({ session: null });
+      clearSync();
+    },
+
+    setJoinedTeam: (teamId: string | undefined) => {
+      const { session } = get();
+      if (session) {
+        const newSession = { ...session, joinedTeamId: teamId };
+        set({ session: newSession });
+        broadcastUpdate({ session: newSession });
+        saveState({ session: newSession });
       }
-    })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams' }, (payload: { new: Record<string, unknown> }) => {
-      const newTeam = payload.new as Record<string, unknown>;
-      useGameStore.setState((state) => ({
-        teams: state.teams.map(t => t.id === newTeam.id ? { ...t, ...newTeam } as Team : t)
-      }));
-    })
-    .subscribe();
+    },
+
+    saveToLocalStorage: () => {
+      saveState(get() as unknown as Record<string, unknown>);
+    },
+
+    loadFromLocalStorage: () => {
+      const saved = loadState();
+      if (saved) {
+        set(saved as Partial<GameState>);
+        return true;
+      }
+      return false;
+    },
+  };
+});
+
+// ─── Supabase Realtime Subscriptions (Legacy / Single Game) ────────────────
+
+if (typeof window !== 'undefined') {
+  subscribeToGameStateLegacy((n) => {
+    useGameStore.setState({
+      currentView: n.current_view as View ?? undefined,
+      projectorMode: n.projector_mode as ProjectorMode ?? undefined,
+      currentRound: (n.current_round as number) ?? undefined,
+      announcementText: n.announcement_text as string ?? '',
+      isSuddenDeath: (n.is_suddenDeath as boolean) ?? false,
+      introTeamId: n.intro_team_id as string | null ?? null,
+      timer: {
+        duration: (n.timer_duration as number) ?? 0,
+        remaining: (n.timer_remaining as number) ?? 0,
+        isActive: (n.timer_is_active as boolean) ?? false,
+      },
+      rounds: (n.rounds as RoundDefinition[]) ?? undefined,
+      roundsData: (n.rounds_data as RoundData) ?? undefined,
+      quiz: {
+        questions: (n.quiz_questions as []) ?? [],
+        currentIndex: (n.quiz_index as number) ?? 0,
+        isRevealed: (n.quiz_revealed as boolean) ?? false,
+        buzzedTeamId: n.buzzed_team_id as string | null ?? null,
+      },
+      tasteTest: {
+        items: (n.taste_items as []) ?? [],
+        currentIndex: (n.taste_index as number) ?? 0,
+        isRevealed: false,
+        itemsCustomized: false,
+      },
+      duel: {
+        challengerId: n.duel_challenger as string | null ?? null,
+        challengedId: n.duel_challenged as string | null ?? null,
+        winnerId: n.duel_winner as string | null ?? null,
+        isActive: (n.duel_active as boolean) ?? false,
+      },
+    });
+  });
+
+  subscribeToTeamsLegacy((n) => {
+    useGameStore.setState((state) => ({
+      teams: state.teams.map(t => t.id === n.id ? { ...t, ...n } as Team : t)
+    }));
+  });
 }

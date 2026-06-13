@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Trophy, Users, ChefHat, Play, Edit2, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Trophy, Users, ChefHat, Play, Edit2, ChevronRight, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_QUIZ_QUESTIONS, DEFAULT_TASTE_ITEMS } from '@/lib/constants';
+import { createDefaultRounds } from '@/types/rounds';
 import { clsx } from 'clsx';
 
 import { 
@@ -22,6 +23,7 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog";
+import { RoundEditor } from '@/components/views/RoundEditor';
 
 const COLORS = [
   '#ef4444', '#3b82f6', '#22c55e', '#eab308', 
@@ -29,13 +31,14 @@ const COLORS = [
 ];
 
 export function SetupView() {
-  const { teams, setTeams, setView, setQuizQuestions, setTasteItems, session, joinSession, competitionName, setCompetitionName } = useGameStore();
+  const { teams, setTeams, setView, setQuizQuestions, setTasteItems, setRounds, session, joinSession, competitionName, setCompetitionName } = useGameStore();
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamChant, setNewTeamChant] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempCompName, setTempCompName] = useState(competitionName);
+  const [roundEditorOpen, setRoundEditorOpen] = useState(false);
 
   const handleJoinSession = async () => {
     if (!joinCode.trim()) return;
@@ -79,6 +82,7 @@ export function SetupView() {
 
   const handleStart = () => {
     if (teams.length < 3) return;
+    setRounds(createDefaultRounds());
     setQuizQuestions(DEFAULT_QUIZ_QUESTIONS);
     setTasteItems(DEFAULT_TASTE_ITEMS);
     
@@ -189,6 +193,14 @@ export function SetupView() {
                   <span className="font-black text-foreground text-lg">{info.value}</span>
                 </div>
               ))}
+              <Button
+                variant="outline"
+                className="w-full h-12 font-black uppercase tracking-widest border-dashed"
+                onClick={() => setRoundEditorOpen(true)}
+              >
+                <Settings className="mr-2" size={16} /> Configure Rounds
+              </Button>
+
               <Button onClick={handleStart} className="w-full h-16 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20">
                 <Play className="mr-2" /> Start Competition
               </Button>
@@ -232,6 +244,8 @@ export function SetupView() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+
+              <RoundEditor open={roundEditorOpen} onOpenChange={setRoundEditorOpen} />
             </CardContent>
           </Card>
         </div>

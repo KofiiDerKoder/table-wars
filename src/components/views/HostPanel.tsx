@@ -21,7 +21,6 @@ import {
   ChevronRight, 
   ChevronLeft,
   Timer as TimerIcon,
-  Monitor,
   Zap,
   Type,
   Keyboard,
@@ -34,26 +33,13 @@ import { useState } from 'react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { 
-  QuizControls, 
-  PlacementControls, 
-  TasteTestControls, 
-  FinaleControls 
-} from '@/components/RoundControls';
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RoundHostView } from '@/components/views/RoundHostView';
 
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 
@@ -109,7 +95,7 @@ export function HostPanel() {
   };
 
   /** Opens the team editing dialog */
-  const handleEditClick = (team: any) => {
+  const handleEditClick = (team: { id: string; name: string; color: string; chant?: string }) => {
     setEditTeamId(team.id);
     setEditingName(team.name);
     setEditingColor(team.color);
@@ -132,15 +118,8 @@ export function HostPanel() {
     await createSession();
   };
 
-  const ROUNDS = [
-    { id: 1, name: 'Table Trivia', type: 'quiz' },
-    { id: 2, name: 'Food Relay', type: 'physical' },
-    { id: 3, name: 'Table Building', type: 'creative' },
-    { id: 4, name: 'Blind Taste Test', type: 'sensory' },
-    { id: 5, name: 'Grand Finale', type: 'finale' },
-  ];
-
-  const currentRoundInfo = ROUNDS.find(r => r.id === currentRound);
+  const roundDefs = useGameStore(s => s.rounds);
+  const currentRoundInfo = roundDefs.find(r => r.order === currentRound);
 
   return (
     <div className="flex h-screen bg-muted/30 text-foreground overflow-hidden">
@@ -251,11 +230,11 @@ export function HostPanel() {
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => setCurrentRound(Math.max(1, currentRound - 1))}><ChevronLeft /></Button>
               <div className="flex gap-1">
-                {ROUNDS.map(r => (
-                  <div key={r.id} className={clsx("w-8 h-1 rounded-full transition-all", r.id === currentRound ? "bg-primary w-12" : "bg-slate-200")} />
+                {roundDefs.map(r => (
+                  <div key={r.id} className={clsx("w-8 h-1 rounded-full transition-all", r.order === currentRound ? "bg-primary w-12" : "bg-slate-200")} />
                 ))}
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentRound(Math.min(5, currentRound + 1))}><ChevronRight /></Button>
+              <Button variant="ghost" size="icon" onClick={() => setCurrentRound(Math.min(roundDefs.length, currentRound + 1))}><ChevronRight /></Button>
             </div>
             {session && (
               <>
@@ -394,11 +373,7 @@ export function HostPanel() {
             )}
           </AnimatePresence>
 
-          {currentRound === 1 && <QuizControls />}
-          {currentRound === 2 && <PlacementControls round={2} />}
-          {currentRound === 3 && <PlacementControls round={3} />}
-          {currentRound === 4 && <TasteTestControls />}
-          {currentRound === 5 && <FinaleControls />}
+          <RoundHostView />
         </div>
 
         <footer className="h-24 border-t border-border bg-white flex items-center justify-between px-8">

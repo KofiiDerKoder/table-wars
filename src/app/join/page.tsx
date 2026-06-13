@@ -27,8 +27,9 @@ export default function JoinPage() {
 
 
   // Store and router hooks
-  const joinSession = useGameStore(s => s.joinSession); // Function to join a session from game store
-  const setView = useGameStore(s => s.setView); // Function to set the current view from game store
+  const joinSession = useGameStore(s => s.joinSession);
+  const setView = useGameStore(s => s.setView);
+  const competitionName = useGameStore(s => s.competitionName);
   const router = useRouter(); // Router for navigation
 
   /**
@@ -68,7 +69,7 @@ export default function JoinPage() {
         <CardHeader className="text-center pt-10 pb-6 border-b border-slate-800">
           <Trophy className="mx-auto text-blue-500 mb-4" size={48} />
           <CardTitle className="text-3xl font-black tracking-tighter text-white uppercase">
-            JOIN <span className="text-blue-600">TABLE WARS!</span>
+            JOIN <span className="text-blue-600">{competitionName}</span>
           </CardTitle>
           <p className="text-slate-500 font-medium text-sm mt-2 uppercase tracking-widest">Team Participation Portal</p>
         </CardHeader>

@@ -342,7 +342,7 @@ export function TasteTestControls() {
          <div className="flex justify-between items-end">
             <div>
                <h2 className="text-5xl font-black text-foreground mb-2">{item.name.toUpperCase()}</h2>
-               <p className="text-xl text-muted-foreground italic">Hint: "{item.hint}"</p>
+               <p className="text-xl text-muted-foreground italic">Hint: &quot;{item.hint}&quot;</p>
             </div>
             <Button 
               onClick={revealContent} 

@@ -47,9 +47,8 @@ export function GlobalListeners() {
         // Use getState() for the tick to ensure we have the absolute latest value
         useGameStore.getState().tickTimer();
       }, 1000);
-    } else if (timer.isActive && timer.remaining === 0) {
-      // Auto-stop when reaching zero
-      useGameStore.setState({ timer: { ...timer, isActive: false } });
+    } else if (timer.isActive && timer.remaining <= 0) {
+      useGameStore.setState({ timer: { ...timer, isActive: false, remaining: 0 } });
     }
     return () => clearInterval(interval);
   }, [timer.isActive, timer.remaining]);
@@ -115,12 +114,15 @@ export function GlobalListeners() {
           toggleTimer();
           break;
         case 'ArrowRight':
-          // Progression shortcuts
-          if (s.currentRound === 1 || s.currentRound === 5) {
-            stopTimer();
-            nextQuestion();
+          {
+            // Progression shortcuts
+            const currentDef = s.rounds.find(r => r.order === s.currentRound);
+            if (currentDef?.type === 'quiz' || currentDef?.type === 'finale') {
+              stopTimer();
+              nextQuestion();
+            }
+            if (currentDef?.type === 'taste') nextTasteItem();
           }
-          if (s.currentRound === 4) nextTasteItem();
           break;
       }
 
@@ -128,7 +130,8 @@ export function GlobalListeners() {
       // Allows the host to manually trigger a buzz for a team by index
       if (/^[1-8]$/.test(e.key)) {
         const teamIdx = parseInt(e.key) - 1;
-        if (s.teams[teamIdx] && (s.currentRound === 1 || s.currentRound === 5)) {
+        const currentDef = s.rounds.find(r => r.order === s.currentRound);
+        if (s.teams[teamIdx] && (currentDef?.type === 'quiz' || currentDef?.type === 'finale')) {
           buzzIn(s.teams[teamIdx].id);
           SoundEngine.playBuzzer();
         }

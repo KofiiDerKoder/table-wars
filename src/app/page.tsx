@@ -17,25 +17,16 @@ import { LiveScoreboard } from '@/components/views/LiveScoreboard';
 import { TeamView } from '@/components/views/TeamView';
 import { ResultsView } from '@/components/views/ResultsView';
 import { LandingScreen } from '@/components/views/LandingScreen';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 export default function GamePage() {
   const { currentView } = useGameStore();
-  const [hasStarted, setHasStarted] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  /**
-   * HYDRATION & PERSISTENCE CHECK
-   * We wait for mount to avoid hydration mismatch (SSR vs CSR).
-   * We also check localStorage to see if the user was already in a game.
-   */
-  useEffect(() => {
-    setMounted(true);
-    const started = localStorage.getItem('tablewars-started');
-    if (started === 'true') {
-      setHasStarted(true);
+  const [hasStarted, setHasStarted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('tablewars-started') === 'true';
     }
-  }, []);
+    return false;
+  });
 
   const handleStart = () => {
     setHasStarted(true);
@@ -43,7 +34,7 @@ export default function GamePage() {
   };
 
   // Prevent hydration flicker
-  if (!mounted) return null;
+  if (typeof window === 'undefined') return null;
 
   // Show landing gate if game hasn't "started" in this browser
   if (!hasStarted) {

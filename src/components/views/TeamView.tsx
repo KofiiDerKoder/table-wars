@@ -17,7 +17,9 @@ export function TeamView() {
   const buzzIn = useGameStore(s => s.buzzIn);
   const session = useGameStore(s => s.session);
   const setView = useGameStore(s => s.setView);
+  const setJoinedTeam = useGameStore(s => s.setJoinedTeam);
   const competitionName = useGameStore(s => s.competitionName);
+  const roundDefs = useGameStore(s => s.rounds);
   
   const [localSelectedTeamId, setLocalSelectedTeamId] = useState<string | null>(null);
 
@@ -25,9 +27,7 @@ export function TeamView() {
   const team = teams.find(t => t.id === effectiveTeamId);
 
   const handleSelectTeam = (id: string) => {
-    if (session) {
-      useGameStore.setState({ session: { ...session, joinedTeamId: id } });
-    }
+    setJoinedTeam(id);
     setLocalSelectedTeamId(id);
   };
 
@@ -35,7 +35,7 @@ export function TeamView() {
     if (!effectiveTeamId || quiz.buzzedTeamId) return;
     buzzIn(effectiveTeamId);
     SoundEngine.playBuzzer();
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    try { if (navigator.vibrate) navigator.vibrate([100, 50, 100]); } catch { /* vibrate not supported */ }
   };
 
   if (!effectiveTeamId) {
@@ -88,14 +88,20 @@ export function TeamView() {
   }
 
   if (!team) return null;
+  const maxRound = Math.max(
+    currentRound,
+    ...teams.flatMap(t => Object.keys(t.roundScores).map(Number)),
+    roundDefs.length
+  );
 
   const isBuzzed = quiz.buzzedTeamId === team.id;
   const someoneElseBuzzed = quiz.buzzedTeamId && quiz.buzzedTeamId !== team.id;
 
+  const currentRoundDef = roundDefs.find(r => r.order === currentRound);
+  const showBuzzer = currentRoundDef?.type === 'quiz' || currentRoundDef?.type === 'finale';
+
   const handleSwitchTeam = () => {
-    if (session) {
-      useGameStore.setState({ session: { ...session, joinedTeamId: undefined } });
-    }
+    setJoinedTeam(undefined);
     setLocalSelectedTeamId(null);
   };
 
@@ -150,7 +156,7 @@ export function TeamView() {
               </CardHeader>
               <CardContent className="p-6">
                 <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map(r => (
+                  {Array.from({ length: maxRound }, (_, i) => i + 1).map(r => (
                     <div key={r} className={clsx(
                       "flex items-center justify-between p-3 rounded-xl border transition-all",
                       currentRound === r ? "bg-primary/10 border-primary/30" : "bg-slate-950/50 border-slate-800"
@@ -176,7 +182,7 @@ export function TeamView() {
           {/* Interactive Area */}
           <div className="lg:col-span-8 flex flex-col items-center justify-center py-8">
             <AnimatePresence mode="wait">
-              {(currentRound === 1 || currentRound === 5) ? (
+              {showBuzzer ? (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -260,7 +266,7 @@ export function TeamView() {
       {/* Footer / Connection Status */}
       <footer className="p-6 text-center border-t border-slate-900 bg-slate-950/80 backdrop-blur-sm">
         <p className="text-[9px] font-black text-slate-700 uppercase tracking-[0.3em]">
-          Boarding House Table Wars • v2.0 Production Sync
+          {competitionName} • v2.0 Production Sync
         </p>
       </footer>
     </div>

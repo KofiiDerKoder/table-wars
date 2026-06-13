@@ -24,7 +24,11 @@ import html2canvas from 'html2canvas';
 export function ResultsView() {
   // --- Global Store State ---
   const teams = useGameStore(s => s.teams);
+  const quiz = useGameStore(s => s.quiz);
   const resetAll = useGameStore(s => s.resetAll);
+  const updateTeamScore = useGameStore(s => s.updateTeamScore);
+  const clearBuzz = useGameStore(s => s.clearBuzz);
+  const detectTies = useGameStore(s => s.detectTies);
   const competitionName = useGameStore(s => s.competitionName);
   
   const router = useRouter();
@@ -36,6 +40,19 @@ export function ResultsView() {
   const [isExporting, setIsExporting] = useState(false);
 
   const sortedTeams = [...teams].sort((a, b) => a.score - b.score);
+
+  /** Reveal effect: sequentially reveal teams every 2s */
+  useEffect(() => {
+    if (revealIndex >= 0 && revealIndex < sortedTeams.length) {
+      const timer = setTimeout(() => {
+        setRevealIndex(prev => prev + 1);
+        if (revealIndex === sortedTeams.length - 1) {
+          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#2563eb', '#f59e0b', '#ffffff'] });
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [revealIndex, sortedTeams.length]);
 
   /** 
    * Captures the hidden PDF report div as a canvas and triggers a download.
@@ -55,15 +72,6 @@ export function ResultsView() {
     setIsExporting(false);
   };
 
-  /** Identifies teams tied for the current highest score */
-  const detectTies = () => {
-    if (teams.length < 2) return [];
-    const highToLow = [...teams].sort((a, b) => b.score - a.score);
-    const maxScore = highToLow[0].score;
-    const winners = teams.filter(t => t.score === maxScore);
-    return winners.length > 1 ? winners : [];
-  };
-
   const ties = detectTies();
 
   // --- Tiebreaker Logic ---
@@ -78,7 +86,7 @@ export function ResultsView() {
             {ties.map(team => (
               <div key={team.id} className={clsx(
                 "p-8 rounded-3xl border-4 transition-all flex flex-col items-center gap-6",
-                useGameStore.getState().quiz.buzzedTeamId === team.id ? "border-primary bg-primary/10 animate-pulse" : "border-slate-800 bg-slate-950/50"
+                quiz.buzzedTeamId === team.id ? "border-primary bg-primary/10 animate-pulse" : "border-slate-800 bg-slate-950/50"
               )}>
                 <div className="w-20 h-20 rounded-full border-4 border-white shadow-lg" style={{ backgroundColor: team.color }} />
                 <h3 className="text-3xl font-black uppercase">{team.name}</h3>
@@ -86,7 +94,7 @@ export function ResultsView() {
                   <Button 
                     className="flex-1 bg-green-600 hover:bg-green-700 font-black h-12"
                     onClick={() => {
-                      useGameStore.getState().updateTeamScore(team.id, 1, 5);
+                      updateTeamScore(team.id, 1, 5);
                       setTiebreakerActive(false);
                       setRevealIndex(teams.length); // Stay on results
                     }}
@@ -103,7 +111,7 @@ export function ResultsView() {
               Host: Ask a sudden death question. First team to buzz wins.
             </p>
             <div className="flex justify-center gap-4">
-              <Button variant="outline" className="border-slate-700 text-slate-400 font-black uppercase" onClick={() => useGameStore.getState().clearBuzz()}>
+              <Button variant="outline" className="border-slate-700 text-slate-400 font-black uppercase" onClick={() => clearBuzz()}>
                 CLEAR BUZZ
               </Button>
               <Button variant="ghost" className="text-slate-600 font-black uppercase" onClick={() => setTiebreakerActive(false)}>
@@ -119,19 +127,6 @@ export function ResultsView() {
   const startReveal = () => {
     setRevealIndex(0);
   };
-
-  /** Reveal effect: sequentially reveal teams every 2s */
-  useEffect(() => {
-    if (revealIndex >= 0 && revealIndex < sortedTeams.length) {
-      const timer = setTimeout(() => {
-        setRevealIndex(prev => prev + 1);
-        if (revealIndex === sortedTeams.length - 1) {
-          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#2563eb', '#f59e0b', '#ffffff'] });
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [revealIndex, sortedTeams.length]);
 
   return (
     <div className="min-h-screen bg-muted/30 p-12 flex flex-col items-center font-sans">
@@ -176,7 +171,7 @@ export function ResultsView() {
         </div>
 
         <div className="text-center pt-8 border-t border-slate-100">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Generated on {new Date().toLocaleDateString()} • Boarding House Table Wars System</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Generated on {new Date().toLocaleDateString()} • {competitionName} System</p>
         </div>
       </div>
 

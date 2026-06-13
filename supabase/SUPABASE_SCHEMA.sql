@@ -17,7 +17,7 @@ CREATE TABLE sessions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '24 hours'),
     is_active BOOLEAN DEFAULT TRUE,
-    game_state JSONB DEFAULT '{}',  -- Full serialized game state
+--     game_state JSONB DEFAULT '{}',  -- Full serialized game state (moved to game_state table)
     metadata JSONB DEFAULT '{}'       -- Competition name, school, etc.
 );
 
@@ -31,6 +31,7 @@ CREATE TABLE game_state (
     game_status TEXT DEFAULT 'idle',
     is_suddenDeath BOOLEAN DEFAULT FALSE,
     announcement_text TEXT DEFAULT '',
+    competition_name TEXT DEFAULT 'Table Wars!',
     intro_team_id TEXT DEFAULT NULL,
     timer_remaining INTEGER DEFAULT 0,
     timer_is_active BOOLEAN DEFAULT FALSE,
@@ -61,7 +62,7 @@ CREATE TABLE teams (
     chant TEXT DEFAULT '',
     member_count INTEGER DEFAULT 4,
     taste_item_scores JSONB DEFAULT '{}',
-    team_secret TEXT DEFAULT NULL  -- Secret code for team to authenticate buzzes
+--     team_secret TEXT DEFAULT NULL  -- Secret code for team to authenticate buzzes (removed)
 );
 
 -- 4. Buzz Events (New - Real-time Buzz Tracking)
@@ -77,22 +78,22 @@ CREATE TABLE buzz_events (
 );
 
 -- 5. Quiz Questions (Legacy — questions stored in game_state.quiz_questions)
-CREATE TABLE quiz_questions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    round_id INTEGER NOT NULL,
-    question_text TEXT NOT NULL,
-    options JSONB NOT NULL,
-    correct_answer TEXT NOT NULL,
-    category TEXT
-);
+-- CREATE TABLE quiz_questions (
+--     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     round_id INTEGER NOT NULL,
+--     question_text TEXT NOT NULL,
+--     options JSONB NOT NULL,
+--     correct_answer TEXT NOT NULL,
+--     category TEXT
+-- );
 
 -- 6. Taste Test Items (Legacy — items stored in game_state.taste_items)
-CREATE TABLE taste_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    hint TEXT,
-    category TEXT
-);
+-- CREATE TABLE taste_items (
+--     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     name TEXT NOT NULL,
+--     hint TEXT,
+--     category TEXT
+-- );
 
 -- ─── Indexes for Performance ──────────────────────────────────────────────
 CREATE INDEX idx_sessions_code ON sessions(code);
@@ -101,6 +102,7 @@ CREATE INDEX idx_game_state_session ON game_state(session_id);
 CREATE INDEX idx_teams_session ON teams(session_id);
 CREATE INDEX idx_buzz_events_session ON buzz_events(session_id);
 CREATE INDEX idx_buzz_events_question ON buzz_events(session_id, question_index);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
 -- ─── Enable Realtime ──────────────────────────────────────────────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE sessions;
@@ -173,6 +175,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Note: The UNIQUE constraint on sessions.code handles race conditions on session code
+-- generation. If an INSERT fails due to a duplicate code collision, the application should
+-- retry with a new randomly generated code (see createSession in useGameStore.ts).
+
 -- ─── Function: Lock Buzz (First buzz wins) ────────────────────────────────
 CREATE OR REPLACE FUNCTION lock_buzz_for_question(
     p_session_id UUID,
@@ -182,16 +188,24 @@ CREATE OR REPLACE FUNCTION lock_buzz_for_question(
 RETURNS UUID AS $$
 DECLARE
     v_buzz_id UUID;
+    v_locked BOOLEAN;
 BEGIN
-    -- Check if buzz is already locked for this question
+    -- Use advisory lock to serialize concurrent buzz attempts for this question
+    v_locked := pg_try_advisory_xact_lock(hashtext(concat(p_session_id, '-', p_question_index)));
+
+    IF NOT v_locked THEN
+        RETURN NULL; -- Another transaction is handling this question
+    END IF;
+
+    -- Check if buzz already exists for this question
     SELECT id INTO v_buzz_id
     FROM buzz_events
     WHERE session_id = p_session_id
       AND question_index = p_question_index
-      AND is_locked = TRUE;
+      AND is_locked = TRUE
+    LIMIT 1;
 
     IF v_buzz_id IS NOT NULL THEN
-        -- Buzz already locked, return existing
         RETURN v_buzz_id;
     END IF;
 
@@ -199,13 +213,6 @@ BEGIN
     INSERT INTO buzz_events (session_id, team_id, question_index, is_locked, buzzed_at)
     VALUES (p_session_id, p_team_id, p_question_index, TRUE, NOW())
     RETURNING id INTO v_buzz_id;
-
-    -- Lock any other buzzes for this question
-    UPDATE buzz_events
-    SET is_locked = TRUE
-    WHERE session_id = p_session_id
-      AND question_index = p_question_index
-      AND id != v_buzz_id;
 
     RETURN v_buzz_id;
 END;

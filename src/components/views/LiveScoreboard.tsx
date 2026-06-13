@@ -32,6 +32,9 @@ export function LiveScoreboard() {
   const tasteTest = useGameStore(s => s.tasteTest);
 
   // --- Derived State ---
+  const roundDefs = useGameStore(s => s.rounds);
+  const currentRoundDef = roundDefs.find(r => r.order === currentRound);
+
   const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
   const maxScore = Math.max(...teams.map(t => t.score), 10);
 
@@ -76,7 +79,7 @@ export function LiveScoreboard() {
           {introTeam?.chant && (
              <div className="max-w-4xl mx-auto py-6 md:py-12 px-6 md:px-20 bg-muted rounded-[30px] md:rounded-[60px]">
                 <p className="text-lg md:text-2xl font-black text-primary uppercase tracking-widest mb-2 md:mb-4">Team Chant</p>
-                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">"{introTeam.chant}"</p>
+                <p className="text-2xl md:text-4xl lg:text-6xl font-black italic text-foreground leading-tight">&quot;{introTeam.chant}&quot;</p>
              </div>
           )}
         </motion.div>
@@ -85,8 +88,8 @@ export function LiveScoreboard() {
   }
 
   // Question/Taste Item Display (Conditional Overlay)
-  const showQuestionOverlay = quiz.isRevealed && currentQuestion && (currentRound === 1 || currentRound === 5);
-  const showTasteOverlay = tasteTest.isRevealed && currentTasteItem && currentRound === 4;
+  const showQuestionOverlay = quiz.isRevealed && currentQuestion && (currentRoundDef?.type === 'quiz' || currentRoundDef?.type === 'finale');
+  const showTasteOverlay = tasteTest.isRevealed && currentTasteItem && currentRoundDef?.type === 'taste';
 
   return (
     <div className="min-h-screen bg-muted/50 p-4 md:p-12 text-foreground font-sans selection:bg-primary/20">
@@ -139,4 +142,100 @@ export function LiveScoreboard() {
             </div>
           </div>
         </div>
-...
+
+        {/* Team Leaderboard */}
+        <div className="flex-1 space-y-4 md:space-y-6">
+          <AnimatePresence>
+            {sortedTeams.map((team, index) => (
+              <motion.div
+                key={team.id}
+                layout
+                initial={{ opacity: 0, x: -50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05, type: "spring", stiffness: 100 }}
+                className={clsx(
+                  "relative flex items-center gap-4 md:gap-8 p-4 md:p-6 rounded-2xl md:rounded-3xl bg-white border border-border shadow-lg overflow-hidden",
+                  index === 0 && "ring-2 ring-yellow-400"
+                )}
+              >
+                {/* Rank Badge */}
+                <div className="flex-shrink-0 w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-lg md:text-3xl font-black bg-muted">
+                  {index === 0 ? <Crown className="text-yellow-500 w-6 h-6 md:w-10 md:h-10" /> : `#${index + 1}`}
+                </div>
+
+                {/* Team Color Swatch */}
+                <div className="flex-shrink-0 w-3 h-10 md:w-4 md:h-16 rounded-full" style={{ backgroundColor: team.color }} />
+
+                {/* Team Name */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl md:text-4xl font-black truncate">{team.name}</h3>
+                  <p className="text-xs md:text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                    Round {currentRound}: {team.roundScores[currentRound] || 0} pts
+                  </p>
+                </div>
+
+                {/* Score */}
+                <div className="flex-shrink-0 text-right">
+                  <div className="text-3xl md:text-6xl font-black tabular-nums">{team.score}</div>
+                </div>
+
+                {/* Score Bar */}
+                <div
+                  className="absolute bottom-0 left-0 h-1 md:h-1.5 bg-primary/30"
+                  style={{ width: `${(team.score / maxScore) * 100}%` }}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* Question Overlay */}
+        <AnimatePresence>
+          {showQuestionOverlay && currentQuestion && (
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="fixed inset-0 z-50 bg-background/95 flex items-center justify-center p-8"
+            >
+              <div className="max-w-4xl w-full text-center space-y-8">
+                <Badge className="text-lg px-6 py-2">Question {quiz.currentIndex + 1}</Badge>
+                <h2 className="text-3xl md:text-5xl font-black leading-tight">{currentQuestion.text}</h2>
+                <div className="grid grid-cols-2 gap-4 md:gap-6 mt-8">
+                  {currentQuestion.options.map((opt, i) => (
+                    <div
+                      key={i}
+                      className="p-4 md:p-6 rounded-2xl bg-muted border border-border text-xl md:text-3xl font-bold"
+                    >
+                      {opt}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Taste Overlay */}
+        <AnimatePresence>
+          {showTasteOverlay && currentTasteItem && (
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="fixed inset-0 z-50 bg-background/95 flex items-center justify-center p-8"
+            >
+              <div className="max-w-4xl w-full text-center space-y-8">
+                <Badge className="text-lg px-6 py-2">Taste Item {tasteTest.currentIndex + 1}</Badge>
+                <h2 className="text-4xl md:text-7xl font-black leading-tight">{currentTasteItem.name}</h2>
+                {currentTasteItem.description && (
+                  <p className="text-xl md:text-3xl text-muted-foreground font-medium">{currentTasteItem.description}</p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
